@@ -4,6 +4,7 @@
       "mcp__Gmail__send_message",
       "mcp__Gmail__reply",
       "mcp__Gmail__forward",
+      "mcp__Gmail__create_filter",
       "mcp__Apollo_io__apollo_emailer_messages_send_now",
       "mcp__Apollo_io__apollo_emailer_messages_create",
       "mcp__Apollo_io__apollo_emailer_campaigns_approve",
@@ -11,7 +12,10 @@
       "mcp__HubSpot__manage_marketing_email",
       "mcp__Zapier__execute_zapier_write_action",
       "mcp__Zapier__run_workflow",
-      "mcp__Zapier__run_workflow_draft"
+      "mcp__Zapier__run_workflow_draft",
+      "mcp__Zapier__create_workflow",
+      "mcp__Zapier__enable_workflow",
+      "mcp__Zapier__publish_workflow_draft"
     ]
   }
 }
