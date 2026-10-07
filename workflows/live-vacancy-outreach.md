@@ -27,7 +27,7 @@ never reads or writes HubSpot, so it cannot touch that routine's `bd_lead_status
    contain prospect personal data.
 7. **Hard payment lock.** `.claude/settings.json` blocks the purchase/billing tools (Apollo email-account and domain purchase, TheirStack invoice, subscription and team-seat tools). Never edit or work around this lock. Outside the repo (normal chats) the same rule applies by instruction: never buy, top up, upgrade or pay for anything.
 8. **Emails only by default.** Do NOT request or reveal phone numbers unless Mustapha explicitly asks for phones in that run's command (e.g. "500 contacts, with phones"). Leave the phone column blank otherwise.
-10. **Never repeat contacts across runs.** Read the private Drive delivered log before enrichment and log every delivered contact and processed vacancy after approval (section 32B).
+10. **Never repeat contacts across runs.** Read the Google Sheet "Westmont – Live-Vacancy MASTER Log" before enrichment and append every delivered contact and processed vacancy after approval (section 32B).
 9. **Apollo emails must be "verified".** Accept an Apollo email only if Apollo marks it verified. If it is missing, unverified, catch-all, guessed/likely or any other status, send that person to FullEnrich for the email.
 6. **Per-run constraints** given in the run command apply to that run only and do not
    change this file unless Mustapha says to change the master instructions.
@@ -497,22 +497,21 @@ Before producing final campaign-ready CSVs, suppress: Duplicate contacts; Previo
 
 Never knowingly re-add someone who has opted out.
 
-## 32B. CROSS-RUN DEDUPLICATION — DELIVERED LOG (approved by Mustapha 2026-10-07)
+## 32B. CROSS-RUN DEDUPLICATION — MASTER LOG (approved by Mustapha 2026-10-07)
 
 Every run must avoid giving Mustapha anyone (or any vacancy) a previous run already gave him.
 
-**Where the log lives:** Google Drive folder "Westmont – Live-Vacancy Delivered Log (PRIVATE)", folder ID `1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ` (https://drive.google.com/drive/folders/1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ). It contains prospect personal data: never copy it into this repo or into Claude memory, and never share the folder.
+**Where the log lives:** ONE Google Sheet, "Westmont – Live-Vacancy MASTER Log" (spreadsheet ID `1cx-VOgMiPJuJaR3RNeo46UVsheKPxEqaSYHzOh9crNk`, https://docs.google.com/spreadsheets/d/1cx-VOgMiPJuJaR3RNeo46UVsheKPxEqaSYHzOh9crNk/edit), inside the private Drive folder "Westmont – Live-Vacancy Delivered Log (PRIVATE)" (folder ID `1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ`). It contains prospect personal data: never copy it into this repo or into Claude memory, and never share it. Use the Google Sheets connector to read and append.
 
-**File format.** The Drive connector can create files but cannot edit them, so each run ADDS new files instead of editing an old one. Two kinds of file live in the folder:
-- `... Delivered contacts` — columns: run_id, delivered_date, email, linkedin_url, first_name, last_name, company_name, company_domain, vacancy_id, vacancy_job_title, campaign_name, contact_priority, status (campaign_ready / review_required).
-- `... Processed vacancies` — columns: run_id, processed_date, vacancy_id, job_url, company_name, company_domain, job_title, job_location, date_posted, outcome (contacts_delivered / no_qualifying_contact / icp_rejected / stale / duplicate).
-The two `00 ... seed (headers only)` files define the columns.
+**Tabs and columns (row 1 is the header; never change or reorder it):**
+- `Delivered contacts`: run_id, delivered_date, email, linkedin_url, first_name, last_name, company_name, company_domain, vacancy_id, vacancy_job_title, campaign_name, contact_priority, status (campaign_ready / review_required).
+- `Processed vacancies`: run_id, processed_date, vacancy_id, job_url, company_name, company_domain, job_title, job_location, date_posted, outcome (contacts_delivered / no_qualifying_contact / icp_rejected / stale / duplicate).
 
 **At the START of every run (before spending any enrichment credits):**
-1. List every file in the folder (Drive `search_files` with `parentId = '1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ'`) and read each one with `read_file_content`.
+1. Read both tabs in full with `get_values` (`'Delivered contacts'!A:M` and `'Processed vacancies'!A:J`).
 2. Build suppression sets: emails (lowercased), LinkedIn URLs (normalized, no trailing slash or query string), first name + last name + company domain, and vacancies (job_url, vacancy_id, or company_domain + job_title + job_location).
-3. Include the number of previously delivered contacts and processed vacancies in the pre-run credit estimate.
-4. If the folder can't be read, STOP and tell Mustapha before spending credits. Only continue without the log if he explicitly says so for that run.
+3. Work out the next run_id (format `YYYY-MM-DD_run-N`, N = runs already logged that day + 1). Include the counts of previously delivered contacts and processed vacancies in the pre-run credit estimate.
+4. If the sheet can't be read (connector off or error), STOP and tell Mustapha before spending credits. Only continue without the log if he explicitly says so for that run.
 
 **During the run:**
 - Skip any vacancy already in the log, unless Mustapha asks in that run to revisit old vacancies.
@@ -520,11 +519,11 @@ The two `00 ... seed (headers only)` files define the columns.
 - A person already delivered for a different vacancy is still skipped, unless Mustapha asks otherwise in that run.
 
 **At the END of every run (only after Mustapha approves the batch at the read-aloud check):**
-- Upload two new files to the folder, as CSV converted to Google Sheets (`create_file`, `contentMimeType: text/csv`, `parentId` = the folder ID):
-  - `YYYY-MM-DD run-N Delivered contacts`: every contact handed over in this run (campaign-ready AND review_required, with status).
-  - `YYYY-MM-DD run-N Processed vacancies`: every vacancy assessed in this run, including rejected ones, with outcome.
-- Read both files back to verify, and tell Mustapha they were logged.
-- Never edit, rename or delete earlier log files.
+- APPEND (never overwrite) with `append_values`: every contact handed over in this run (campaign-ready AND review_required, with status) to `Delivered contacts`, and every vacancy assessed (including rejected ones, with outcome) to `Processed vacancies`. Write all values as plain text so emails, dates and IDs are not auto-converted.
+- Read the new rows back to verify, and tell Mustapha how many rows were logged.
+- Never edit, sort, clear or delete existing rows, and never change the header row.
+
+**Fallback:** if the Sheets connector is unavailable but Drive works, upload the run's rows as new CSV files into the same folder (`YYYY-MM-DD run-N Delivered contacts` / `... Processed vacancies`), tell Mustapha, and read those files too at the start of later runs until they're merged into the master sheet.
 
 The run report must include an "Already delivered (skipped)" count.
 
@@ -559,7 +558,7 @@ Before including a campaign-ready record, verify:
 13. Has the correct specialty/campaign been assigned?
 14. Are all casual fields filled, correctly cased, grammatical and human-sounding (section 17B)?
 15. Does the batch pass the opener-variety check (section 17B-B)?
-16. Has the record been checked against the Drive delivered log (section 32B)?
+16. Has the record been checked against the MASTER Log (section 32B)?
 
 If any material answer is NO, either fix the record, move it to REVIEW_REQUIRED, or exclude it.
 
