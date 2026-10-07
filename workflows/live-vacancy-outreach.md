@@ -296,6 +296,7 @@ The `personalization_line` is the opening sentence of a cold email from a specia
 - Statistics, percentages, dollar figures, headcount numbers or analyst phrasing.
 - More than one fact stacked in a line.
 - Em dashes.
+- Exact posting times anywhere in the line ("posted 3 days ago", "posted yesterday", "posted last week", "this week", a date or weekday). Say "recently", "a few days ago" or "recently posted" instead.
 - Stale facts presented as new ("congrats on the new role" more than 6 months after the move; calling a vacancy "new" when it was posted more than 14 days ago).
 - Calling someone "the hiring manager", or saying the role "reports to you", unless the evidence confirms it (P1). For P2/P3 use softer wording ("your team", "your group") only when the business unit or department evidence supports it; otherwise reference the role only.
 - Anything you cannot point to a source for.
@@ -341,7 +342,7 @@ Goal: nothing that reaches an email may look like it came from a database or an 
 | `location_casual` | The city or metro people actually say. Drop ZIP, "United States" and the state code unless needed to avoid confusion. Use the metro name for suburbs only if that's how the ad or locals would say it. Remote → "remote". | "Houston, TX 77002, United States" → "Houston" |
 | `title_casual` | Their role as a person would describe it in conversation. Prefer leaving titles out of emails; this column exists for templates that need it. | "Sr. Mgr, P&C Eng – TX South" → "running P&C for South Texas" |
 | `skill_casual` | ONE key skill from the job ad, in the engineer's own words. | "SEL relay settings", "substation physical design", "BESS interconnection studies" |
-| `posting_age_phrase` | Never an exact date. 0–7 days: "this week" / "just went up"; 8–14: "recently"; 15–30: "for a few weeks"; 31–60: "for a while now". | |
+| `posting_age_phrase` | NEVER an exact or specific time frame (no "yesterday", "today", "3 days ago", "last week", "this week", weekdays or dates). Vague phrases only. 0–14 days: "recently", "a few days ago", "recently posted", "just recently". 15–60 days: "a little while ago", "for a bit now". | "posted recently"; "went up a few days ago" |
 | `openings_phrase` | Never a number. 1: blank; 2: "a couple of"; 3–5: "a few"; 6+: "several". | "a few P&C roles" |
 | `specialism_casual` | Plain-English market label for templates. | GRID_SUBSTATION → "substation and transmission"; PROTECTION_CONTROL → "P&C"; POWER_SYSTEMS_SCADA → "power systems"; BESS_RENEWABLES → "BESS and renewables"; DATA_CENTRE → "data center electrical" |
 
