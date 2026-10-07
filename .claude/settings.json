@@ -15,7 +15,12 @@
       "mcp__Zapier__run_workflow_draft",
       "mcp__Zapier__create_workflow",
       "mcp__Zapier__enable_workflow",
-      "mcp__Zapier__publish_workflow_draft"
+      "mcp__Zapier__publish_workflow_draft",
+      "mcp__Apollo_io__apollo_email_account_purchase_create",
+      "mcp__Apollo_io__apollo_domain_purchase_index",
+      "mcp__TheirStack__cancel_billing_invoice",
+      "mcp__TheirStack__cancel_subscription",
+      "mcp__TheirStack__add_member_to_team"
     ]
   }
 }

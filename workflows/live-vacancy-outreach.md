@@ -25,6 +25,9 @@ never reads or writes HubSpot, so it cannot touch that routine's `bd_lead_status
 5. **CSV delivery.** Write the CSVs to `outputs/live-vacancy/<YYYY-MM-DD_run-N>/` (git-ignored)
    and hand them to Mustapha as downloadable files in the chat. Never commit them — they
    contain prospect personal data.
+7. **Hard payment lock.** `.claude/settings.json` blocks the purchase/billing tools (Apollo email-account and domain purchase, TheirStack invoice, subscription and team-seat tools). Never edit or work around this lock. Outside the repo (normal chats) the same rule applies by instruction: never buy, top up, upgrade or pay for anything.
+8. **Emails only by default.** Do NOT request or reveal phone numbers unless Mustapha explicitly asks for phones in that run's command (e.g. "500 contacts, with phones"). Leave the phone column blank otherwise.
+9. **Apollo emails must be "verified".** Accept an Apollo email only if Apollo marks it verified. If it is missing, unverified, catch-all, guessed/likely or any other status, send that person to FullEnrich for the email.
 6. **Per-run constraints** given in the run command apply to that run only and do not
    change this file unless Mustapha says to change the master instructions.
 
@@ -247,11 +250,14 @@ Apollo should NOT dictate whom to contact merely because a person matches a gene
 
 ## 15. ENRICHMENT FALLBACK
 
-First attempt contact enrichment using Apollo. Required/desired information: First name; Last name; Current title; Company; Work email; Email verification/status; Phone/direct dial where available; LinkedIn URL.
+First attempt contact enrichment using Apollo. Required information: First name; Last name; Current title; Company; Work email; Email verification/status; LinkedIn URL. Phone/direct dial ONLY when Mustapha asks for phones in that run's command (default: emails only, do not spend credits on phones).
 
-If Apollo cannot provide adequate verified contact information and FullEnrich is available, use FullEnrich as the enrichment fallback:
+Email acceptance rule (approved 2026-10-07):
+- Apollo email status = **verified** → accept it, stop, no FullEnrich call.
+- Apollo email missing, unverified, catch-all/accept-all, guessed, likely/probable, or any other non-verified status → send that person to FullEnrich (email only unless phones were requested).
+- FullEnrich returns a deliverable/valid email → accept it. FullEnrich returns nothing, catch-all or risky → move the contact to review_required (never to campaign CSVs).
 
-APOLLO FIRST → IF REQUIRED CONTACT DATA IS MISSING → FULLENRICH
+APOLLO (VERIFIED ONLY) → OTHERWISE FULLENRICH → OTHERWISE REVIEW_REQUIRED
 
 Do not unnecessarily consume enrichment credits when Apollo already provides adequate verified data.
 
@@ -627,7 +633,7 @@ DISCOVER VACANCY → QUALIFY VACANCY/COMPANY → IDENTIFY RELEVANT PERSON → ON
 
 Do not enrich hundreds of people before determining whether their company/vacancy qualifies.
 
-For contact enrichment: APOLLO FIRST. If adequate verified information exists: STOP. If important information is missing: FULLENRICH FALLBACK. Do not spend credits merely to duplicate information already obtained reliably.
+For contact enrichment: APOLLO FIRST. If Apollo has a VERIFIED email: STOP. If the email is missing or not verified: FULLENRICH FALLBACK (email only). Phones only when requested for that run. Include phone credit costs in the pre-run estimate only when phones are requested. Do not spend credits merely to duplicate information already obtained reliably.
 
 ## 43. LEARNING FROM RESULTS
 
