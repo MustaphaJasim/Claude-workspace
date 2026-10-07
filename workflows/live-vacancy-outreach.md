@@ -29,6 +29,7 @@ never reads or writes HubSpot, so it cannot touch that routine's `bd_lead_status
 8. **Emails only by default.** Do NOT request or reveal phone numbers unless Mustapha explicitly asks for phones in that run's command (e.g. "500 contacts, with phones"). Leave the phone column blank otherwise.
 10. **Never repeat contacts across runs.** Read the Google Sheet "Westmont – Live-Vacancy MASTER Log" before enrichment and append every delivered contact and processed vacancy after approval (section 32B).
 9. **Apollo emails must be "verified".** Accept an Apollo email only if Apollo marks it verified. If it is missing, unverified, catch-all, guessed/likely or any other status, send that person to FullEnrich for the email.
+11. **Batch size cap.** Maximum ~150 campaign-ready contacts per run. The first ever run is a ~50-contact test. If Mustapha asks for more than 150 in one go, recommend splitting it into consecutive runs of up to 150 and ask before starting (he can explicitly override for that run).
 6. **Per-run constraints** given in the run command apply to that run only and do not
    change this file unless Mustapha says to change the master instructions.
 
@@ -407,29 +408,27 @@ AUDIT DATA: research_date, research_notes, data_quality_notes, manual_review_req
 
 HUMAN-SOUNDING DATA (section 17B): company_casual, first_name_casual, last_name_clean, vacancy_casual, location_casual, title_casual, skill_casual, posting_age_phrase, openings_phrase, specialism_casual, opener_pattern
 
-## 24. CSV OUTPUTS
+## 24. CSV OUTPUTS (file naming and folders approved 2026-10-07)
 
 EVERY completed run must produce actual CSV FILES. Do not merely display a table and call it a CSV. Create downloadable .csv files.
 
-Create SEPARATE CAMPAIGN-READY CSV FILES for each specialism that contains qualifying contacts. The standard output files should be:
+**Naming.** Every file starts with the run_id (`YYYY-MM-DD_run-NN`, two-digit run number for that day), e.g. `2026-10-08_run-01_PROTECTION_CONTROL.csv`. Every row also carries `run_id` and `send_wave` columns (`send_wave` = 1 for P1/P2, 2 for P3/P4/P5).
 
-1. westmont_grid_substation.csv
-2. westmont_protection_control.csv
-3. westmont_power_systems_scada.csv
-4. westmont_bess_renewables.csv
-5. westmont_data_centre.csv
-
-Only create a specialty CSV if that run actually contains qualifying contacts for that specialty.
-
-Also create:
-
-6. westmont_master.csv — contains ALL campaign-ready contacts across all specialties.
-
-And where applicable:
-
-7. westmont_review_required.csv — contains potentially useful contacts/vacancies that were NOT considered reliable enough for automatic campaign inclusion and require human review.
+**Files per run:**
+1. One campaign-ready file per specialism that has contacts: `<run_id>_GRID_SUBSTATION.csv`, `<run_id>_PROTECTION_CONTROL.csv`, `<run_id>_POWER_SYSTEMS_SCADA.csv`, `<run_id>_BESS_RENEWABLES.csv`, `<run_id>_DATA_CENTRE.csv`.
+2. `<run_id>_ALL_for_MillionVerifier.csv`: ALL campaign-ready contacts across all specialisms in one file (same columns), so Mustapha verifies the whole run with ONE MillionVerifier upload.
+3. `<run_id>_MASTER_research.csv`: every campaign-ready contact with the full master-dataset research/audit columns (section 23).
+4. Where applicable, `<run_id>_REVIEW_REQUIRED.csv`.
 
 Do NOT mix low-confidence/review-required records into campaign-ready CSVs.
+
+**Where they go.** Hand all files to Mustapha as downloads in the chat AND upload them (as plain CSV, `disableConversionToGoogleType: true`) to the private Drive folder `Westmont Live-Vacancy / 1 - From Claude` (folder ID `116VjiN0pqLk2hDlMlnjwrO-3BbXeHYee`). Never commit them to the repo.
+
+Drive layout (parent folder `Westmont Live-Vacancy`, ID `1Kl1N_lP5xTIzbwpeH6cSQKJe_GuXWc5r`):
+- `1 - From Claude` (`116VjiN0pqLk2hDlMlnjwrO-3BbXeHYee`): files as delivered by each run.
+- `2 - Verified` (`1jQfqag2OqY2-Ipb0xEqvDACi4DM5Fbjg`): MillionVerifier results and the final Instantly-ready files.
+- `3 - Uploaded` (`1vkjjxjdP3qgy2RjkQkXHnAdTxTiVVQU9`): Mustapha moves files here once they're in Instantly.
+- `Westmont – Live-Vacancy Delivered Log (PRIVATE)` (`1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ`): holds the MASTER Log sheet.
 
 ## 25. CAMPAIGN-READY CSV COLUMNS
 
@@ -646,6 +645,24 @@ EXCLUDED: 214 contacts
 ```
 
 Then briefly flag any important data-quality issues.
+
+## 40B. AFTER MILLIONVERIFIER — BUILD THE INSTANTLY FILES (approved 2026-10-07)
+
+Triggered when Mustapha says something like "process my MillionVerifier results for run 2026-10-08_run-01" and attaches the MillionVerifier result file or puts it in `2 - Verified`. This step spends no enrichment credits.
+
+1. Read the MillionVerifier result file and match each row to the run's `_ALL_for_MillionVerifier.csv` by email.
+2. **Keep** only emails MillionVerifier marks good/ok/valid. **Remove** invalid, disposable and bad results. **Hold back** catch-all/accept-all, risky and unknown results: they go to a `<run_id>_HELD_BACK_catchall_unknown.csv` file for Mustapha to decide on, never into Instantly files.
+3. Build the final files, one per specialism and wave, only where non-empty: `<run_id>_<CAMPAIGN>_WAVE1_ready_for_Instantly.csv` (P1/P2) and `<run_id>_<CAMPAIGN>_WAVE2_ready_for_Instantly.csv` (P3–P5). Same campaign-ready columns as section 25, so the Instantly mapping never changes.
+4. Hand them over as downloads and upload them as plain CSV to `2 - Verified` (`1jQfqag2OqY2-Ipb0xEqvDACi4DM5Fbjg`).
+5. Append one row per email to the MASTER Log tab `Verification results` (run_id, verified_date, email, campaign_name, millionverifier_result, action = kept / removed / held_back). Never edit earlier rows.
+6. Report: kept / removed / held back counts per campaign, and which files to upload where.
+
+**Instantly guidance to give Mustapha with the files:**
+- One Instantly campaign per specialism (GRID_SUBSTATION, PROTECTION_CONTROL, POWER_SYSTEMS_SCADA, BESS_RENEWABLES, DATA_CENTRE). Upload each file into its matching campaign; Instantly adds leads to the existing campaign, so batches never need merging.
+- Turn on the option to skip leads that already exist in other campaigns/the workspace.
+- Upload WAVE1 now. Upload WAVE2 only after 10–14 days, and only for companies that haven't replied.
+- After uploading, move the files to `3 - Uploaded`.
+- Claude never uploads to Instantly itself.
 
 ## 41. IF A TOOL OR DATA SOURCE FAILS
 
