@@ -30,17 +30,14 @@ never reads or writes HubSpot, so it cannot touch that routine's `bd_lead_status
 
 ## Tool map (as of 2026-10-07)
 
-- **TheirStack** (job discovery): claude.ai custom connector, tools `mcp__TheirStack__*`
-  (`search_jobs`, `search_companies`, `get_billing_credit_balance`, …). Costs: 1 API credit
-  per job returned by `search_jobs`; 3 API credits per company returned by
-  `search_companies`. Catalog lookups and the balance check are free.
+- **TheirStack** (job discovery): claude.ai connector named "TheirStack" (tools `mcp__TheirStack__search_jobs`,
+  `search_companies`, `get_billing_credit_balance`, …). Costs: 1 API credit per job returned by
+  `search_jobs`; 3 API credits per company returned by `search_companies`. Catalog lookups are free.
 - **Apollo** (`mcp__Apollo_io__*`): people/org search, match and enrichment. Follow Apollo's
   own credit-confirmation rules.
-- **FullEnrich** (enrichment fallback): claude.ai custom connector
-  (`https://mcp.fullenrich.com/mcp`), tools `mcp__FullEnrich__*` (`enrich_bulk`,
-  `get_enrichment_results`, `export_enrichment_results`, `get_credits`, …). Enrichment is
-  asynchronous: launch, then poll results. Check `get_credits` (free) before estimating.
-  If it is unavailable, record that per section 41 and continue with Apollo only.
+- **FullEnrich** (enrichment fallback): claude.ai connector named "FullEnrich" (tools
+  `mcp__FullEnrich__enrich_search_contact`, `enrich_bulk`, `get_credits`, …). Connected 2026-10-07.
+  If it is unavailable in a session, record that per section 41 and continue with Apollo only.
 - **Web search/fetch**: company sites, career pages, news, for verification.
 
 ---
