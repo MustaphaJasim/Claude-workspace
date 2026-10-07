@@ -129,7 +129,7 @@ Do NOT include unrelated mechanical, civil, software, construction or general IT
 
 ## 4. COMPANY ICP
 
-Prioritize companies approximately 20–500 employees and approximately $5M–$150M revenue.
+Prioritize companies approximately 20–1,000 employees and approximately $5M–$500M revenue (widened from 20–500 / $5M–$150M by Mustapha on 2026-10-07).
 
 These are useful ICP indicators rather than reasons to fabricate certainty.
 
