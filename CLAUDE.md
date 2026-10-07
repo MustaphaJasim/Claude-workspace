@@ -7,3 +7,4 @@
 - Never commit resumes or candidate personal data. The `candidates/` folder is git-ignored.
 - Full operating manual: the `westmont-recruitment-os` skill installed on his account.
 - **Live-vacancy outreach workflow** (`workflows/live-vacancy-outreach.md`) runs only when Mustapha commands it ("run the live-vacancy workflow for N contacts"). Never schedule it. Credit estimate and his yes before every run; pause and ask if credits run out; never pay for anything. Output is CSVs only (in git-ignored `outputs/`), handed to him as downloads. It never touches HubSpot or the daily BD routine.
+- **Live-vacancy personalization** follows section 17 of `workflows/live-vacancy-outreach.md` (approved 2026-10-07): vacancy-first hooks, no greeting, American English, one sentence, nothing purely personal, no stats, no em dashes.
