@@ -6,3 +6,4 @@
 - **Daily 6am BD routine** (`trig_01HB1UsKqeJFhdE5WfusxEbJ`) is a separate workflow he wants to keep. Never edit, pause, disable or delete it. Running it on demand (fire it) is fine when he asks.
 - Never commit resumes or candidate personal data. The `candidates/` folder is git-ignored.
 - Full operating manual: the `westmont-recruitment-os` skill installed on his account.
+- **Live-vacancy outreach workflow** (`workflows/live-vacancy-outreach.md`) runs only when Mustapha commands it ("run the live-vacancy workflow for N contacts"). Never schedule it. Credit estimate and his yes before every run; pause and ask if credits run out; never pay for anything. Output is CSVs only (in git-ignored `outputs/`), handed to him as downloads. It never touches HubSpot or the daily BD routine.
