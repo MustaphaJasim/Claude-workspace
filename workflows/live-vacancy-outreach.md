@@ -27,6 +27,7 @@ never reads or writes HubSpot, so it cannot touch that routine's `bd_lead_status
    contain prospect personal data.
 7. **Hard payment lock.** `.claude/settings.json` blocks the purchase/billing tools (Apollo email-account and domain purchase, TheirStack invoice, subscription and team-seat tools). Never edit or work around this lock. Outside the repo (normal chats) the same rule applies by instruction: never buy, top up, upgrade or pay for anything.
 8. **Emails only by default.** Do NOT request or reveal phone numbers unless Mustapha explicitly asks for phones in that run's command (e.g. "500 contacts, with phones"). Leave the phone column blank otherwise.
+10. **Never repeat contacts across runs.** Read the private Drive delivered log before enrichment and log every delivered contact and processed vacancy after approval (section 32B).
 9. **Apollo emails must be "verified".** Accept an Apollo email only if Apollo marks it verified. If it is missing, unverified, catch-all, guessed/likely or any other status, send that person to FullEnrich for the email.
 6. **Per-run constraints** given in the run command apply to that run only and do not
    change this file unless Mustapha says to change the master instructions.
@@ -462,7 +463,7 @@ When I request "Give me 1,000 contacts" I mean approximately 1,000 campaign-read
 
 However: QUALITY OVERRIDES QUANTITY. Do not weaken qualification standards merely to hit the requested number.
 
-At the end of every run report: Requested contact count; Campaign-ready contacts produced; Unique companies; Unique vacancies; Contacts requiring manual review; Contacts excluded; Breakdown by specialty; Breakdown by P1/P2/P3/P4/P5; Percentage with verified email; Percentage with phone number; Percentage with LinkedIn URL; Average vacancy-owner confidence.
+At the end of every run report: Requested contact count; Campaign-ready contacts produced; Already delivered in earlier runs (skipped); Unique companies; Unique vacancies; Contacts requiring manual review; Contacts excluded; Breakdown by specialty; Breakdown by P1/P2/P3/P4/P5; Percentage with verified email; Percentage with phone number; Percentage with LinkedIn URL; Average vacancy-owner confidence.
 
 ## 29. MULTIPLE VACANCIES AT ONE COMPANY
 
@@ -496,6 +497,37 @@ Before producing final campaign-ready CSVs, suppress: Duplicate contacts; Previo
 
 Never knowingly re-add someone who has opted out.
 
+## 32B. CROSS-RUN DEDUPLICATION — DELIVERED LOG (approved by Mustapha 2026-10-07)
+
+Every run must avoid giving Mustapha anyone (or any vacancy) a previous run already gave him.
+
+**Where the log lives:** Google Drive folder "Westmont – Live-Vacancy Delivered Log (PRIVATE)", folder ID `1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ` (https://drive.google.com/drive/folders/1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ). It contains prospect personal data: never copy it into this repo or into Claude memory, and never share the folder.
+
+**File format.** The Drive connector can create files but cannot edit them, so each run ADDS new files instead of editing an old one. Two kinds of file live in the folder:
+- `... Delivered contacts` — columns: run_id, delivered_date, email, linkedin_url, first_name, last_name, company_name, company_domain, vacancy_id, vacancy_job_title, campaign_name, contact_priority, status (campaign_ready / review_required).
+- `... Processed vacancies` — columns: run_id, processed_date, vacancy_id, job_url, company_name, company_domain, job_title, job_location, date_posted, outcome (contacts_delivered / no_qualifying_contact / icp_rejected / stale / duplicate).
+The two `00 ... seed (headers only)` files define the columns.
+
+**At the START of every run (before spending any enrichment credits):**
+1. List every file in the folder (Drive `search_files` with `parentId = '1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ'`) and read each one with `read_file_content`.
+2. Build suppression sets: emails (lowercased), LinkedIn URLs (normalized, no trailing slash or query string), first name + last name + company domain, and vacancies (job_url, vacancy_id, or company_domain + job_title + job_location).
+3. Include the number of previously delivered contacts and processed vacancies in the pre-run credit estimate.
+4. If the folder can't be read, STOP and tell Mustapha before spending credits. Only continue without the log if he explicitly says so for that run.
+
+**During the run:**
+- Skip any vacancy already in the log, unless Mustapha asks in that run to revisit old vacancies.
+- Check every person against the suppression sets BEFORE enriching them. If they're already delivered, skip them (no credits) and count them as "already delivered".
+- A person already delivered for a different vacancy is still skipped, unless Mustapha asks otherwise in that run.
+
+**At the END of every run (only after Mustapha approves the batch at the read-aloud check):**
+- Upload two new files to the folder, as CSV converted to Google Sheets (`create_file`, `contentMimeType: text/csv`, `parentId` = the folder ID):
+  - `YYYY-MM-DD run-N Delivered contacts`: every contact handed over in this run (campaign-ready AND review_required, with status).
+  - `YYYY-MM-DD run-N Processed vacancies`: every vacancy assessed in this run, including rejected ones, with outcome.
+- Read both files back to verify, and tell Mustapha they were logged.
+- Never edit, rename or delete earlier log files.
+
+The run report must include an "Already delivered (skipped)" count.
+
 ## 33. JOB FRESHNESS
 
 Prioritize newly posted vacancies. The more recent the hiring signal, the more valuable it generally is. Store `days_since_posted`.
@@ -527,6 +559,7 @@ Before including a campaign-ready record, verify:
 13. Has the correct specialty/campaign been assigned?
 14. Are all casual fields filled, correctly cased, grammatical and human-sounding (section 17B)?
 15. Does the batch pass the opener-variety check (section 17B-B)?
+16. Has the record been checked against the Drive delivered log (section 32B)?
 
 If any material answer is NO, either fix the record, move it to REVIEW_REQUIRED, or exclude it.
 
