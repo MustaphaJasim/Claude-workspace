@@ -326,6 +326,49 @@ The `personalization_line` is the opening sentence of a cold email from a specia
 
 (Sections 18–21 merged into section 17 above.)
 
+## 17B. HUMAN-SOUNDING FIELDS AND ANTI-AI RULES (approved by Mustapha 2026-10-07)
+
+Goal: nothing that reaches an email may look like it came from a database or an AI. Raw data from Apollo/TheirStack is kept for the record, but every field that can be inserted into an email gets a "casual" version written the way a human recruiter would type it. Instantly templates must use the casual columns, never the raw ones.
+
+### A. Casual columns (required for every campaign-ready row)
+
+| Casual column | Rule | Example |
+|---|---|---|
+| `company_casual` | The name a person would say. Drop legal suffixes (Inc, Inc., LLC, L.L.C., Ltd, Corp, Corporation, Co., LP, LLP, PLLC, Holdings) and a leading "The". Fix ALL-CAPS and odd casing to the company's own styling. Remove parentheticals, "dba", taglines and trailing ", a XYZ company". Keep words people actually say (e.g. "Pattern Energy", "Burns & McDonnell"). If the brand differs from the legal name, use the brand the company's own staff use on its website/LinkedIn. If the contact works for a clearly named business unit, use what that unit is called in practice. | "NextEra Energy Resources, LLC" → "NextEra"; "The Goldfield Corporation" → "Goldfield" |
+| `first_name_casual` | Proper casing. Use a nickname ONLY if the person publicly uses it (LinkedIn name, email address, company bio). Never guess. | "JOHN" → "John"; "Robert" → "Bob" only if he goes by Bob publicly |
+| `last_name_clean` | Proper casing; strip credentials (P.E., PE, PhD, MBA, PMP, CSP, etc.). | "Smith, P.E." → "Smith" |
+| `vacancy_casual` | The role the way an engineer would say it, with "a"/"an" included. Strip levels (I/II/III) unless meaningful, req numbers, "(Hybrid)", "- Remote", brackets, location tags and internal codes. Use the company's own acronym style (P&C vs Protection and Controls). | "Engineer II – Protection & Control (Hybrid) – Req #48213" → "a P&C engineer"; "Sr. Substation Design Engineer - Physical" → "a senior substation design engineer" |
+| `location_casual` | The city or metro people actually say. Drop ZIP, "United States" and the state code unless needed to avoid confusion. Use the metro name for suburbs only if that's how the ad or locals would say it. Remote → "remote". | "Houston, TX 77002, United States" → "Houston" |
+| `title_casual` | Their role as a person would describe it in conversation. Prefer leaving titles out of emails; this column exists for templates that need it. | "Sr. Mgr, P&C Eng – TX South" → "running P&C for South Texas" |
+| `skill_casual` | ONE key skill from the job ad, in the engineer's own words. | "SEL relay settings", "substation physical design", "BESS interconnection studies" |
+| `posting_age_phrase` | Never an exact date. 0–7 days: "this week" / "just went up"; 8–14: "recently"; 15–30: "for a few weeks"; 31–60: "for a while now". | |
+| `openings_phrase` | Never a number. 1: blank; 2: "a couple of"; 3–5: "a few"; 6+: "several". | "a few P&C roles" |
+| `specialism_casual` | Plain-English market label for templates. | GRID_SUBSTATION → "substation and transmission"; PROTECTION_CONTROL → "P&C"; POWER_SYSTEMS_SCADA → "power systems"; BESS_RENEWABLES → "BESS and renewables"; DATA_CENTRE → "data center electrical" |
+
+All casual values use American English and correct grammar.
+
+### B. Variety across the batch
+1. No single opening phrase (first three words of `personalization_line`) may appear in more than ~15–20% of the batch. Rotate structures: lead with the role, the location, the skill or the team.
+2. Vary sentence shape and length, not just wording.
+3. Contacts at the same company must get clearly different lines (colleagues compare emails).
+4. Store `opener_pattern` (a short label for the structure used) in the master CSV so variety can be checked.
+5. Run a variety check before finalizing: count openers, flag overused ones, rewrite until within limits.
+
+### C. Template safety
+1. NO blank values in any campaign-ready row for columns templates use (`first_name_casual`, `company_casual`, `personalization_line`, `vacancy_casual`, `location_casual`). If any is blank or uncertain, move the row to review_required. Never let Instantly produce "Hi ," or "at ,".
+2. Every casual value must read correctly when dropped into a sentence: correct "a"/"an", no leading/trailing spaces, no stray punctuation, no ALL CAPS, and no trailing period except on `personalization_line` (which ends with a period).
+3. Use the acronyms the company uses (P&C vs Protection and Controls) and correct casing for industry terms (ERCOT, BESS, SCADA, SEL, HV, MV).
+4. Never guess gender; never use he/she/his/her about the recipient.
+5. No em dashes, emojis, exclamation marks, or curly-quote/encoding artifacts (Ã©, â€™) in any casual field.
+
+### D. Outside the CSV (Mustapha controls these; flag issues if seen)
+- Email body templates (one per specialism) should be reviewed with Claude before first use so the variables fit naturally. Status as of 2026-10-07: not yet reviewed.
+- Sending: plain text, no links or images in email 1, sent during Texas business hours (Central Time), short, normal signature.
+
+### E. Human read-aloud check (every run)
+At the end of every run, before CSV hand-off, show Mustapha a random sample of 20 campaign-ready rows rendered as they would read in the email (personalization_line plus the casual fields). He reads them aloud and approves before anything is uploaded. Flag any row you yourself would hesitate to send.
+
+
 ## 22. MULTI-CONTACT SAFETY
 
 The database may contain 3–5 contacts associated with one hiring requirement. That does NOT mean all 3–5 should automatically receive identical emails simultaneously.
@@ -353,6 +396,8 @@ CAMPAIGN DATA: campaign_name, campaign_specialism, campaign_status
 AUDIT DATA: research_date, research_notes, data_quality_notes, manual_review_required, exclusion_reason
 
 (Also include, per sections 29 and 33: number_of_relevant_openings, related_vacancies, multiple_hiring_signal, days_since_posted.)
+
+HUMAN-SOUNDING DATA (section 17B): company_casual, first_name_casual, last_name_clean, vacancy_casual, location_casual, title_casual, skill_casual, posting_age_phrase, openings_phrase, specialism_casual, opener_pattern
 
 ## 24. CSV OUTPUTS
 
@@ -382,7 +427,7 @@ Do NOT mix low-confidence/review-required records into campaign-ready CSVs.
 
 The specialty CSV files must be immediately usable for upload into Instantly. Use the following columns:
 
-first_name, last_name, email, phone, linkedin_url, job_title, company_name, company_domain, vacancy_job_title, vacancy_location, vacancy_date_posted, vacancy_url, vacancy_source, primary_specialism, secondary_specialism, contact_priority, confirmed_vacancy_owner, relationship_to_vacancy, vacancy_owner_confidence_score, vacancy_owner_confidence_level, selection_reason, personalization_line, personalization_type, key_technical_requirements, key_skills, hiring_signal, campaign_name
+first_name_casual, last_name_clean, first_name, last_name, email, phone, linkedin_url, job_title, title_casual, company_name, company_casual, company_domain, vacancy_job_title, vacancy_casual, location_casual, skill_casual, posting_age_phrase, openings_phrase, specialism_casual, vacancy_location, vacancy_date_posted, vacancy_url, vacancy_source, primary_specialism, secondary_specialism, contact_priority, confirmed_vacancy_owner, relationship_to_vacancy, vacancy_owner_confidence_score, vacancy_owner_confidence_level, selection_reason, personalization_line, personalization_type, key_technical_requirements, key_skills, hiring_signal, campaign_name
 
 Do not unnecessarily overload the campaign-ready CSV with every piece of internal research. The full master CSV should contain the complete research/audit fields specified earlier.
 
@@ -390,7 +435,9 @@ Do not unnecessarily overload the campaign-ready CSV with every piece of interna
 
 The campaign-ready CSVs should be structured so fields can be mapped to Instantly variables. At minimum, preserve:
 
-{{first_name}} {{last_name}} {{company_name}} {{job_title}} {{vacancy_job_title}} {{vacancy_location}} {{primary_specialism}} {{relationship_to_vacancy}} {{personalization_line}} {{key_technical_requirements}} {{key_skills}} {{hiring_signal}}
+{{first_name_casual}} {{last_name_clean}} {{company_casual}} {{title_casual}} {{vacancy_casual}} {{location_casual}} {{skill_casual}} {{posting_age_phrase}} {{openings_phrase}} {{specialism_casual}} {{personalization_line}}
+
+Templates must use the casual columns, never the raw ones (raw first_name, company_name, vacancy_job_title, job_location etc. are kept for records only). Internal research fields such as relationship_to_vacancy, key_technical_requirements, key_skills and hiring_signal must not be inserted into emails.
 
 Do NOT write the complete cold-email sequence unless separately instructed. Your current job is to produce accurate prospect intelligence and personalization that can feed the relevant Instantly campaign.
 
@@ -471,6 +518,8 @@ Before including a campaign-ready record, verify:
 11. Does the personalization actually help explain why Westmont is contacting this person?
 12. Has the record been deduplicated?
 13. Has the correct specialty/campaign been assigned?
+14. Are all casual fields filled, correctly cased, grammatical and human-sounding (section 17B)?
+15. Does the batch pass the opener-variety check (section 17B-B)?
 
 If any material answer is NO, either fix the record, move it to REVIEW_REQUIRED, or exclude it.
 
@@ -524,6 +573,8 @@ I may later choose to create HubSpot records for: Positive replies; Qualified co
 ## 40. OUTPUT STRUCTURE AFTER EACH RUN
 
 When a run finishes:
+
+BEFORE HAND-OFF: Show the 20-row human read-aloud sample (section 17B-E) and get Mustapha's approval.
 
 FIRST: Provide the actual downloadable CSV files.
 
