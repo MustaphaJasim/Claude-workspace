@@ -263,59 +263,70 @@ Prefer verified work emails. Do not knowingly include: Invalid emails; Clearly p
 
 Store email verification/status where available.
 
-## 17. PERSONALIZATION
+## 17. PERSONALIZATION RULES (MASTER — approved by Mustapha 2026-10-07)
 
-Create personalization for EVERY campaign-ready contact. This is extremely important.
+These rules replace the earlier personalization sections 17–21 and 36. If anything elsewhere in this file conflicts with them, these rules win.
 
-Personalization must be: True; Current; Relevant; Natural; Useful to the outreach; Specific enough that it does not sound mass-generated.
+**Purpose of the line**
+The `personalization_line` is the opening sentence of a cold email from a specialist electrical-engineering recruiter to someone connected to a live vacancy. Its only job is to show, in one natural sentence, that we know exactly why we're contacting this person right now. It is not there to prove we researched them, to flatter them, or to build fake rapport.
 
-NEVER invent personalization. NEVER use irrelevant trivia merely because it is technically "personal." NEVER use stale information in a way that makes the email sound automated.
+**Hook priority (use the first one that is true and evidenced)**
 
-- BAD: "Congratulations on starting your role at ABC Engineering." when they started two years ago. That is stale, unnatural and obviously machine-generated.
-- BAD: "I was impressed by ABC's commitment to innovation." Generic AI fluff.
-- BAD: "I noticed you went to Texas A&M." unless that information genuinely contributes to a natural and relevant reason for contacting them.
+1. **The vacancy plus their link to it (DEFAULT).** Name the specific role and, where evidence supports it, connect it to their team. Add location or one key technical requirement if it makes it sharper.
+2. **A recent professional fact about them that connects to hiring.** Promotion or new role in the last 3–6 months, their own public post about hiring or team growth, or a project/win they announced that explains the hiring. Only if recent and clearly linked to the vacancy or their team.
+3. **A company hiring signal.** Several related openings at once, a new Texas office or yard, a project that explains the hiring push. Only when evidenced.
+4. **No good hook.** Leave the line blank and set `manual_review_required = YES`. Blank beats weak.
 
-The purpose of personalization is NOT to prove that we scraped the internet. It is to establish RELEVANCE.
+**Match the angle to the contact (same vacancy, different reason to care)**
+- P1/P2 (owner or direct manager): the role itself, the technical skill set, the workload of an empty seat.
+- P3 (senior functional leader): the team build-out, or several openings across the group.
+- P4 (Talent Acquisition): how niche or hard to source the profile is, or how long it has been open.
+- P5 (small-company executive): growth or project delivery depending on getting this hire.
 
-## 18. PERSONALIZATION PRIORITY
+**Tone and format**
+- One sentence. Two short sentences at most. Aim for under 25 words.
+- Sounds like a person typed it quickly to a peer: casual, direct, professional, specific.
+- Correct grammar and spelling. ALWAYS use American English spelling and phrasing.
+- NO greeting of any kind. Do not start with "Hi", "Hey", "Hello", the person's name or similar. Start straight with the observation.
+- State the observation and stop. No question, no call to action, no pitch. Those live in the email body.
+- Use the engineer's language (P&C, relay settings, SEL, substation design, interconnection, switchgear) when it appears in the job ad. Don't explain it.
 
-FIRST PRIORITY: A meaningful, recent, professionally relevant fact about the PERSON that naturally connects to the outreach. Examples: Very recent promotion into responsibility for this function; Recent relevant technical/project announcement; Recent public comment/post specifically connected to the hiring challenge; Current responsibility for the relevant engineering group. Only use this if it is genuinely current and relevant.
+**Never use**
+- Purely personal content: family, kids, pregnancy, pets, vacations, health, religion, politics, hobbies, school/university, sports teams, or any sharing of the sender's own life.
+- Flattery: "impressed", "love what you're doing", "amazing", "exciting", "innovative".
+- AI-style openers: "I noticed", "I came across", "I hope this finds you well", "I wanted to reach out", "As a leader in…".
+- Statistics, percentages, dollar figures, headcount numbers or analyst phrasing.
+- More than one fact stacked in a line.
+- Em dashes.
+- Stale facts presented as new ("congrats on the new role" more than 6 months after the move; calling a vacancy "new" when it was posted more than 14 days ago).
+- Calling someone "the hiring manager", or saying the role "reports to you", unless the evidence confirms it (P1). For P2/P3 use softer wording ("your team", "your group") only when the business unit or department evidence supports it; otherwise reference the role only.
+- Anything you cannot point to a source for.
 
-SECOND PRIORITY: The person's direct relationship to the live vacancy. Example: "Noticed you're leading P&C engineering while the team is currently adding another Senior P&C Engineer in Houston."
+**Final check (rewrite or blank the line if any answer fails)**
+1. Would a busy engineering manager believe a real recruiter wrote this after reading the job ad?
+2. Could this sentence go to 500 other companies by swapping the name? If yes, it is too generic.
+3. Is every fact true, current and backed by `personalization_source`?
+4. One fact, one sentence, no greeting, no flattery, no stats, no question?
 
-THIRD PRIORITY: Specific details from the vacancy itself. Example: "Saw you're looking for a Senior P&C Engineer in Houston with strong SEL and relay-settings experience."
+**Fields to fill:** `personalization_line`, `personalization_type` (VACANCY / PERSON_PROFESSIONAL / COMPANY_SIGNAL / NONE), `personalization_source` (URL), `personalization_source_date`, `personalization_confidence` (HIGH / MEDIUM / LOW). LOW goes to review_required, never into campaign CSVs.
 
-FOURTH PRIORITY: A current, meaningful company hiring signal. Example: "Looks like the team is building out its transmission group pretty aggressively in Texas at the moment."
+**Good examples** (fictional companies, for style only)
+1. Vacancy, P1 confirmed owner: "Saw you're hiring a Senior P&C Engineer in Houston, looks like it's heavy on SEL relay settings."
+2. Vacancy, P2 likely direct manager: "Saw the Substation Design Engineer opening in Dallas, I'm guessing that one would land in your group."
+3. Recent professional fact, P3: "Congrats on stepping up to run transmission engineering this summer, looks like the team is already hiring for it."
+4. Company hiring signal, P4 TA: "Looks like you've got a few protection and controls roles open across Texas right now, that profile isn't an easy one to find."
+5. Small company, P5 exec: "Saw Ridgeline is hiring an electrical engineer for its BESS interconnection work in Austin."
 
-Prefer relevance over forced personal trivia.
+**Bad examples and why**
+- "Congrats on the new baby! I've got a 9-month-old myself." Purely personal, creepy from a stranger, unrelated to the email.
+- "I was impressed by Acme's innovative approach to grid modernization." Flattery, AI phrasing, could go to anyone.
+- "With your team growing 40% and 6 open roles, you must be busy!" Stats, stacked facts, fake enthusiasm.
+- "As the hiring manager for this role…" (when they're only P3). Claims something the evidence doesn't support.
+- "Hi John, saw you're hiring…" Has a greeting. The template handles greetings.
 
-## 19. PERSONALIZATION FRESHNESS
+**Candidate matching:** not part of this workflow for now. Do not reference specific candidates in the personalization line.
 
-For time-sensitive personal facts, prefer events from approximately the last 3–6 months. Older information may be used ONLY when it remains clearly relevant today. Never present an old event as though it just happened.
-
-Store `personalization_source`, `personalization_source_date`, `personalization_confidence` where possible.
-
-If no meaningful person-specific personalization exists: DO NOT invent one. Use strong vacancy-specific personalization instead. Vacancy relevance is better than fake personalization.
-
-## 20. PERSONALIZATION STYLE
-
-Create `personalization_line`. This should normally be ONE concise sentence.
-
-Tone: Natural; Professional; Human; Direct; Casual-professional American B2B style.
-
-Avoid: Excessive praise; "I was impressed..."; "I came across..."; "I hope this email finds you well"; Corporate fluff; Fake familiarity; Unnecessary statistics; Long sentences; Creepy personal details; AI-sounding observations.
-
-The personalization should naturally lead into a recruitment conversation.
-
-## 21. DIFFERENT CONTACTS MAY REQUIRE DIFFERENT ANGLES
-
-Do not necessarily use identical personalization for P1, P2, P3, P4 and P5.
-
-- A functional engineering manager may care about: technical scarcity; workload; delivery deadlines; difficulty finding the exact engineering skillset.
-- Talent Acquisition may care about: difficulty sourcing the niche profile; vacancy duration; candidate availability; hiring throughput.
-- An executive at a small company may care about: growth; project delivery; inability to hire specialist engineers quickly enough.
-
-Keep the underlying vacancy consistent while adapting relevance to the recipient.
+(Sections 18–21 merged into section 17 above.)
 
 ## 22. MULTI-CONTACT SAFETY
 
@@ -409,7 +420,7 @@ Example: Company has Senior P&C Engineer, P&C Engineer II, Lead Protection Engin
 
 Create one contact record and record: number_of_relevant_openings, related_vacancies, multiple_hiring_signal = YES.
 
-This can make the personalization stronger. Example: "Looks like you're building the P&C team pretty aggressively at the moment — I spotted several protection openings across the group." Only say this when supported by actual evidence.
+This can make the personalization stronger. Example: "Looks like you're building the P&C team pretty aggressively at the moment, I spotted several protection openings across the group." Only say this when supported by actual evidence.
 
 ## 30. CONTACT DEDUPLICATION
 
@@ -477,14 +488,7 @@ An incomplete truthful record is better than a complete false record.
 
 ## 36. PERSONALIZATION FINAL CHECK
 
-Before accepting each personalization line, ask:
-
-1. "If this person received this sentence, would it sound like a competent human recruiter had actually researched why they were contacting them?" If NO: rewrite it.
-2. "Could this sentence have been sent to 500 other companies simply by swapping the company name?" If YES: it is probably too generic. Rewrite it.
-3. "Is this fact sufficiently current and relevant that mentioning it would feel natural?" If NO: do not use it.
-4. "Am I using irrelevant personal information merely to create the illusion of personalization?" If YES: remove it.
-
-Meaningful relevance beats superficial personalization.
+Use the final check in section 17.
 
 ## 37. RESEARCH NOTES VS EMAIL PERSONALIZATION
 
