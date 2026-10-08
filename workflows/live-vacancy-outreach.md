@@ -476,7 +476,14 @@ Drive layout (parent folder `Westmont Live-Vacancy`, ID `1Kl1N_lP5xTIzbwpeH6cSQK
 - `3 - Uploaded` (`1vkjjxjdP3qgy2RjkQkXHnAdTxTiVVQU9`): Mustapha moves a batch folder here once it's in Instantly.
 - `Westmont – Live-Vacancy Delivered Log (PRIVATE)` (`1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ`): holds the MASTER Log sheet.
 
-Note: run `2026-10-07_run-1` predates this rule and also has per-specialism files in its folder. Ignore those; section 40B rebuilds final files from the ALL file.
+Note: run `2026-10-07_run-1` predates this rule; its old per-specialism files were moved to `1 - From Claude / _old – safe to delete` on 2026-10-08.
+
+**Drive housekeeping (approved by Mustapha 2026-10-08).** Mustapha should never have to move or rename anything himself:
+- Claude creates the run folder, the batch folder and every file in the right place with the right name, automatically, every time.
+- Never delete or trash any Drive file or folder. Anything extra, outdated or duplicated goes into the subfolder `_old – safe to delete` inside `1 - From Claude` (folder ID `1jC7HUe6tmXBtEJHOQmRW-MieSqFJ-Gza`); Mustapha deletes it himself.
+- Never put anything in `3 - Uploaded`; only Mustapha moves batch folders there.
+- The `Delivered Log (PRIVATE)` folder holds only the MASTER Log sheet.
+- If a past run is ever found in the wrong place or with the wrong name, show Mustapha a table (current location, new location, new name) and move/rename with `update_file` only after his yes.
 
 ## 25. CAMPAIGN-READY CSV COLUMNS
 
@@ -715,7 +722,7 @@ Triggered by "process my MillionVerifier results for <batch_id or run_id>". Must
    - Reds whose email already came from FullEnrich are dropped, not retried.
    - Log dropped reds as `removed` and retried ones as `retried_fullenrich` in the Verification results tab.
 3. Build the final files, one per specialism and wave, only where non-empty: `<batch_id>_<CAMPAIGN>_WAVE1_ready_for_Instantly.csv` (P1/P2) and `<batch_id>_<CAMPAIGN>_WAVE2_ready_for_Instantly.csv` (P3–P5). These use the campaign-ready columns in section 25, so the Instantly mapping never changes. A batch covering several runs still produces at most 5 campaigns × 2 waves.
-4. Save them, plus the MillionVerifier result, in the batch's subfolder in `2 - Verified` (create the subfolder if it doesn't exist; for a single run it is named the run_id). Also hand them over as downloads.
+4. Save everything for the batch in its subfolder in `2 - Verified` (create the subfolder if it doesn't exist; for a single run it is named the run_id), all as plain CSV (`disableConversionToGoogleType: true`): the combined MillionVerifier file (if several runs were combined), the MillionVerifier result Mustapha provided, the `<batch_id>_<CAMPAIGN>_WAVE1/WAVE2_ready_for_Instantly.csv` files (only non-empty ones, 10 at most), `<batch_id>_HELD_BACK_catchall_unknown.csv`, and `<batch_id>_RETRY_for_MillionVerifier.csv` if any. Nothing for a batch is left loose in `2 - Verified`. Also hand them over as downloads.
 5. Append one row per email to the MASTER Log tab `Verification results` (run_id = the row's own run_id, verified_date, email, campaign_name, millionverifier_result, action = kept / removed / held_back). Never edit earlier rows.
 6. Report kept / removed / held back counts per campaign, and say which file goes into which Instantly campaign.
 
