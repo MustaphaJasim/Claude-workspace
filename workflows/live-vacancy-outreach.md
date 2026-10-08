@@ -408,27 +408,28 @@ AUDIT DATA: research_date, research_notes, data_quality_notes, manual_review_req
 
 HUMAN-SOUNDING DATA (section 17B): company_casual, first_name_casual, last_name_clean, vacancy_casual, location_casual, title_casual, skill_casual, posting_age_phrase, openings_phrase, specialism_casual, opener_pattern
 
-## 24. CSV OUTPUTS (file naming and folders approved 2026-10-07)
+## 24. CSV OUTPUTS (file naming and folders approved 2026-10-07, tidied 2026-10-08)
 
 EVERY completed run must produce actual CSV FILES. Do not merely display a table and call it a CSV. Create downloadable .csv files.
 
-**Naming.** Every file starts with the run_id (`YYYY-MM-DD_run-NN`, two-digit run number for that day), e.g. `2026-10-08_run-01_PROTECTION_CONTROL.csv`. Every row also carries `run_id` and `send_wave` columns (`send_wave` = 1 for P1/P2, 2 for P3/P4/P5).
+**Naming.** Every file starts with the run_id (`YYYY-MM-DD_run-N`, N = runs already logged that day + 1, e.g. `2026-10-08_run-1`). Every row also carries `run_id` and `send_wave` columns (`send_wave` = 1 for P1/P2, 2 for P3/P4/P5).
 
-**Files per run:**
-1. One campaign-ready file per specialism that has contacts: `<run_id>_GRID_SUBSTATION.csv`, `<run_id>_PROTECTION_CONTROL.csv`, `<run_id>_POWER_SYSTEMS_SCADA.csv`, `<run_id>_BESS_RENEWABLES.csv`, `<run_id>_DATA_CENTRE.csv`.
-2. `<run_id>_ALL_for_MillionVerifier.csv`: ALL campaign-ready contacts across all specialisms in one file (same columns), so Mustapha verifies the whole run with ONE MillionVerifier upload.
-3. `<run_id>_MASTER_research.csv`: every campaign-ready contact with the full master-dataset research/audit columns (section 23).
-4. Where applicable, `<run_id>_REVIEW_REQUIRED.csv`.
+**Files per run (only these three; do NOT produce per-specialism files at this stage, they are built after verification in section 40B):**
+1. `<run_id>_ALL_for_MillionVerifier.csv`: ALL campaign-ready contacts across all specialisms, using the campaign-ready columns in section 25 (plus run_id and send_wave). This is the only file Mustapha uploads to MillionVerifier.
+2. `<run_id>_MASTER_research.csv`: every campaign-ready contact with the full master-dataset research/audit columns (section 23).
+3. Where applicable, `<run_id>_REVIEW_REQUIRED.csv`.
 
-Do NOT mix low-confidence/review-required records into campaign-ready CSVs.
+Do NOT mix low-confidence/review-required records into the campaign-ready file.
 
-**Where they go.** Hand all files to Mustapha as downloads in the chat AND upload them (as plain CSV, `disableConversionToGoogleType: true`) to the private Drive folder `Westmont Live-Vacancy / 1 - From Claude` (folder ID `116VjiN0pqLk2hDlMlnjwrO-3BbXeHYee`). Never commit them to the repo.
+**Where they go.** Create ONE subfolder per run, named exactly the run_id, inside `Westmont Live-Vacancy / 1 - From Claude` (folder ID `116VjiN0pqLk2hDlMlnjwrO-3BbXeHYee`). Upload the run's files there as plain CSV (`disableConversionToGoogleType: true`), and also hand them to Mustapha as downloads in the chat. Never commit them to the repo. Never leave run files loose in `1 - From Claude`.
 
 Drive layout (parent folder `Westmont Live-Vacancy`, ID `1Kl1N_lP5xTIzbwpeH6cSQKJe_GuXWc5r`):
-- `1 - From Claude` (`116VjiN0pqLk2hDlMlnjwrO-3BbXeHYee`): files as delivered by each run.
-- `2 - Verified` (`1jQfqag2OqY2-Ipb0xEqvDACi4DM5Fbjg`): MillionVerifier results and the final Instantly-ready files.
-- `3 - Uploaded` (`1vkjjxjdP3qgy2RjkQkXHnAdTxTiVVQU9`): Mustapha moves files here once they're in Instantly.
+- `1 - From Claude` (`116VjiN0pqLk2hDlMlnjwrO-3BbXeHYee`): one subfolder per run (e.g. `2026-10-07_run-1`).
+- `2 - Verified` (`1jQfqag2OqY2-Ipb0xEqvDACi4DM5Fbjg`): one subfolder per verification batch, holding the MillionVerifier result, the combined file and the final Instantly-ready files.
+- `3 - Uploaded` (`1vkjjxjdP3qgy2RjkQkXHnAdTxTiVVQU9`): Mustapha moves a batch folder here once it's in Instantly.
 - `Westmont – Live-Vacancy Delivered Log (PRIVATE)` (`1WxHSgu65n7GTQTnggu9O-GXguEYyctnZ`): holds the MASTER Log sheet.
+
+Note: run `2026-10-07_run-1` predates this rule and also has per-specialism files in its folder. Ignore those; section 40B rebuilds final files from the ALL file.
 
 ## 25. CAMPAIGN-READY CSV COLUMNS
 
@@ -646,22 +647,33 @@ EXCLUDED: 214 contacts
 
 Then briefly flag any important data-quality issues.
 
-## 40B. AFTER MILLIONVERIFIER — BUILD THE INSTANTLY FILES (approved 2026-10-07)
+## 40B. VERIFICATION AND INSTANTLY FILES (approved 2026-10-07, combined batches added 2026-10-08)
 
-Triggered when Mustapha says something like "process my MillionVerifier results for run 2026-10-08_run-01" and attaches the MillionVerifier result file or puts it in `2 - Verified`. This step spends no enrichment credits.
+This step spends no enrichment credits. It can cover ONE run or SEVERAL runs at once.
 
-1. Read the MillionVerifier result file and match each row to the run's `_ALL_for_MillionVerifier.csv` by email.
-2. **Keep** only emails MillionVerifier marks good/ok/valid. **Remove** invalid, disposable and bad results. **Hold back** catch-all/accept-all, risky and unknown results: they go to a `<run_id>_HELD_BACK_catchall_unknown.csv` file for Mustapha to decide on, never into Instantly files.
-3. Build the final files, one per specialism and wave, only where non-empty: `<run_id>_<CAMPAIGN>_WAVE1_ready_for_Instantly.csv` (P1/P2) and `<run_id>_<CAMPAIGN>_WAVE2_ready_for_Instantly.csv` (P3–P5). Same campaign-ready columns as section 25, so the Instantly mapping never changes.
-4. Hand them over as downloads and upload them as plain CSV to `2 - Verified` (`1jQfqag2OqY2-Ipb0xEqvDACi4DM5Fbjg`).
-5. Append one row per email to the MASTER Log tab `Verification results` (run_id, verified_date, email, campaign_name, millionverifier_result, action = kept / removed / held_back). Never edit earlier rows.
-6. Report: kept / removed / held back counts per campaign, and which files to upload where.
+**Step 1: build the MillionVerifier file (only needed when combining runs).**
+Triggered by "combine all unverified runs" (or "combine runs X and Y").
+1. Find unverified runs: run_ids that appear in the MASTER Log `Delivered contacts` tab with status `campaign_ready` but whose emails do not appear in the `Verification results` tab.
+2. Read each of those runs' `<run_id>_ALL_for_MillionVerifier.csv` from its run folder in `1 - From Claude`.
+3. Merge them into ONE file, dropping any duplicate emails, keeping each row's own run_id.
+4. Create a batch_id `YYYY-MM-DD_batch-N` (N = batches already created that day + 1). Create a subfolder named the batch_id in `2 - Verified` (`1jQfqag2OqY2-Ipb0xEqvDACi4DM5Fbjg`), and save `<batch_id>_COMBINED_for_MillionVerifier.csv` there as plain CSV. Also hand it over as a download.
+5. Tell Mustapha which runs and how many contacts it covers. For a single run, skip this step: the run's own ALL file is the MillionVerifier file and its batch_id is the run_id.
+
+**Step 2: process the MillionVerifier results.**
+Triggered by "process my MillionVerifier results for <batch_id or run_id>". Mustapha attaches the MillionVerifier result file or puts it in that batch's folder in `2 - Verified`.
+1. Match each result row to the combined/ALL file by email.
+2. **Keep** only emails MillionVerifier marks good/ok/valid. **Remove** invalid, disposable and bad results. **Hold back** catch-all/accept-all, risky and unknown results in `<batch_id>_HELD_BACK_catchall_unknown.csv` for Mustapha to decide on, never in Instantly files.
+3. Build the final files, one per specialism and wave, only where non-empty: `<batch_id>_<CAMPAIGN>_WAVE1_ready_for_Instantly.csv` (P1/P2) and `<batch_id>_<CAMPAIGN>_WAVE2_ready_for_Instantly.csv` (P3–P5). These use the campaign-ready columns in section 25, so the Instantly mapping never changes. A batch covering several runs still produces at most 5 campaigns × 2 waves.
+4. Save them, plus the MillionVerifier result, in the batch's subfolder in `2 - Verified` (create the subfolder if it doesn't exist; for a single run it is named the run_id). Also hand them over as downloads.
+5. Append one row per email to the MASTER Log tab `Verification results` (run_id = the row's own run_id, verified_date, email, campaign_name, millionverifier_result, action = kept / removed / held_back). Never edit earlier rows.
+6. Report kept / removed / held back counts per campaign, and say which file goes into which Instantly campaign.
 
 **Instantly guidance to give Mustapha with the files:**
 - One Instantly campaign per specialism (GRID_SUBSTATION, PROTECTION_CONTROL, POWER_SYSTEMS_SCADA, BESS_RENEWABLES, DATA_CENTRE). Upload each file into its matching campaign; Instantly adds leads to the existing campaign, so batches never need merging.
 - Turn on the option to skip leads that already exist in other campaigns/the workspace.
 - Upload WAVE1 now. Upload WAVE2 only after 10–14 days, and only for companies that haven't replied.
-- After uploading, move the files to `3 - Uploaded`.
+- Get each batch into Instantly within 2–3 days of the runs, so "recently posted" stays true.
+- After uploading, move the batch folder from `2 - Verified` to `3 - Uploaded`.
 - Claude never uploads to Instantly itself.
 
 ## 41. IF A TOOL OR DATA SOURCE FAILS
