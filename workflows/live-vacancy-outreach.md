@@ -143,6 +143,7 @@ Exclude:
 - Companies clearly outside Westmont's engineering niche
 - Companies without meaningful relevance to the targeted electrical-engineering markets
 - **Vacancies or companies that say "no agencies", "no third-party recruiters", "principals only" or similar** in the job ad or on the careers page (approved by Mustapha 2026-10-08). Hard exclude; log the vacancy as `icp_rejected` with the reason.
+  - **Relaxed 2026-10-08 (Mustapha):** only exclude when the ad clearly refuses agencies, e.g. "no agencies", "no recruiters or staffing firms please", "principals only", "please do not contact" staff. A standard legal disclaimer such as "we do not accept unsolicited resumes from third-party recruiters" or "agencies need a signed agreement" is NOT an exclusion; keep the vacancy and note the disclaimer in `data_quality_notes`.
 
 Apply judgment rather than blindly matching keywords.
 
@@ -314,6 +315,12 @@ The `personalization_line` is the opening sentence of a cold email from a specia
 - P3 (senior functional leader): the team build-out, or several openings across the group.
 - P4 (Talent Acquisition): how niche or hard to source the profile is, or how long it has been open.
 - P5 (small-company executive): growth or project delivery depending on getting this hire.
+
+**Template fit (approved by Mustapha 2026-10-08)**
+The line is dropped into the email right after a sentence that already names the role, e.g. "Hey {{first_name_casual}}, I'm reaching out regarding your job ad for {{vacancy_casual}}. {{personalization_line}}". So the line must read naturally as the NEXT sentence:
+- Don't restate "X is hiring a Y" or repeat the role title; refer back to it ("it", "that one", "the role") or go straight to the angle (the skill, the team link, how niche or long-open it is).
+- Where it fits, open with a natural, human hedge: "Looks like", "Seems like", "Sounds like", "It's clear that" (only with real evidence, e.g. a reports-to line), "I imagine", "Guessing", "From the ad,". Only use one when it makes the sentence sound more human; a plain statement is fine otherwise. Rotate them so no opener dominates.
+- Read every line aloud inside the full template sentence before hand-off.
 
 **Tone and format**
 - One sentence. Two short sentences at most. Aim for under 25 words.
