@@ -142,8 +142,34 @@ Exclude:
 - Primarily defense/military-focused companies
 - Companies clearly outside Westmont's engineering niche
 - Companies without meaningful relevance to the targeted electrical-engineering markets
+- **Vacancies or companies that say "no agencies", "no third-party recruiters", "principals only" or similar** in the job ad or on the careers page (approved by Mustapha 2026-10-08). Hard exclude; log the vacancy as `icp_rejected` with the reason.
 
 Apply judgment rather than blindly matching keywords.
+
+### 4A. PRIORITIZE COMPANIES MORE LIKELY TO USE RECRUITERS (approved by Mustapha 2026-10-08)
+
+Within the ICP, spend research and credits first on vacancies showing these signals. Score each vacancy and process the highest scores first. A vacancy with none of them can still qualify, but goes to the back of the queue.
+
+| Signal (must be evidenced) | Points |
+|---|---|
+| Niche role inside Westmont's specialisms (P&C, SCADA, power systems studies, substation design, interconnection, BESS, data center electrical) | +2 |
+| Vacancy open 20+ days (posted date or repost history), still live | +2 |
+| Company has several similar openings at once | +2 |
+| Rare skill or credential required (e.g. PE license, SEL relay settings, PSCAD/ETAP/PSS/E, ERCOT interconnection, NERC CIP) | +2 |
+| Company has a new project, contract win or new Texas office/yard (dated, sourced) | +1 |
+| Senior role (senior, lead, principal, manager) | +1 |
+
+Store `agency_likelihood_score` (0–10) and `agency_signals` (short list of the signals found, with sources) in the master research CSV, and show the score spread in the run report.
+
+### 4B. WARNING SIGNS (deprioritize and flag, don't hard-exclude unless stated above)
+
+- Hiring only through a preferred supplier list or vendor portal (e.g. Fieldglass, Beeline, an MSP). Flag as `psl_or_vms = YES`.
+- Utilities, co-ops and municipal/public bodies that buy recruitment through formal procurement.
+- Junior, entry-level or graduate roles.
+- The same role is already advertised by a staffing agency.
+- Recent layoffs or a hiring freeze in the news.
+
+An internal Talent Acquisition team is NOT a negative signal on its own. Still target the vacancy owner first (P1/P2); TA stays the P4 fallback.
 
 ## 5. JOB DISCOVERY
 
@@ -331,6 +357,20 @@ The `personalization_line` is the opening sentence of a cold email from a specia
 - "As the hiring manager for this role…" (when they're only P3). Claims something the evidence doesn't support.
 - "Hi John, saw you're hiring…" Has a greeting. The template handles greetings.
 
+**Distinctive requirement (approved by Mustapha 2026-10-08)**
+When the job ad has a requirement that is genuinely distinctive (a rare skill, tool, credential or type of project, e.g. ERCOT interconnection studies, SEL relay settings, a PE license, PSCAD modeling, utility-scale BESS commissioning), the line should reference it by default. Rules:
+- The whole line stays under 20 words.
+- Paraphrase it the way an engineer would say it out loud. NEVER copy the job ad's wording or phrasing (copied phrases read as AI). Standard technical terms and acronyms (SEL, PSCAD, ERCOT, PE) are fine; the sentence around them must be your own.
+- It must make sense, sound natural and casual, and be technically correct.
+- Never generic requirements ("5+ years", "bachelor's degree", "strong communication skills", "team player").
+- Only one requirement per line. If nothing is distinctive, use the plain vacancy hook instead.
+- Never hint that you have a matching candidate.
+
+Examples (fictional):
+- Ad: "Must possess demonstrated proficiency in SEL relay setting development and testing." Good: "Saw the P&C opening in Houston, sounds like they need someone who really knows SEL relays." Bad: "Saw you need demonstrated proficiency in SEL relay setting development."
+- Ad: "Experience performing ERCOT generation interconnection studies required." Good: "Saw the power systems role, looks like it needs someone who's done ERCOT interconnection work before."
+- Ad: "PE licensure in the State of Texas required." Good: "Saw the substation lead role in Dallas, needing a Texas PE narrows that search down a lot."
+
 **Candidate matching:** not part of this workflow for now. Do not reference specific candidates in the personalization line.
 
 (Sections 18–21 merged into section 17 above.)
@@ -392,9 +432,9 @@ Maintain a master dataset internally for each run. At minimum include these colu
 
 VACANCY DATA: vacancy_id, job_title, company_name, company_domain, company_website, job_location, job_state, remote_status, date_posted, job_url, job_source, employment_type, job_seniority, department, business_unit, primary_specialism, secondary_specialism, technical_requirements, key_skills, important_technologies, years_experience_required, salary_range, reports_to, job_poster_name, job_poster_title, job_poster_linkedin, hiring_team_information, hiring_urgency, additional_hiring_signals
 
-COMPANY DATA: company_headcount, company_revenue, company_size_confidence, texas_presence, company_icp_status, company_icp_notes
+COMPANY DATA: company_headcount, company_revenue, company_size_confidence, texas_presence, company_icp_status, company_icp_notes, agency_likelihood_score, agency_signals, psl_or_vms
 
-CONTACT DATA: contact_first_name, contact_last_name, contact_full_name, contact_title, contact_company, contact_email, email_verification_status, contact_phone, contact_linkedin
+CONTACT DATA: contact_first_name, contact_last_name, contact_full_name, contact_title, contact_company, contact_email, email_verification_status, email_source (apollo / fullenrich), contact_phone, contact_linkedin
 
 VACANCY RELATIONSHIP DATA: contact_priority, confirmed_vacancy_owner, relationship_to_vacancy, vacancy_owner_confidence_score, vacancy_owner_confidence_level, vacancy_owner_evidence, selection_reason
 
@@ -529,13 +569,13 @@ The run report must include an "Already delivered (skipped)" count.
 
 ## 33. JOB FRESHNESS
 
-Prioritize newly posted vacancies. The more recent the hiring signal, the more valuable it generally is. Store `days_since_posted`.
+Store `days_since_posted`. Updated by Mustapha 2026-10-08: a role that has stayed open 20+ days is a strong sign the company is struggling and more open to a recruiter (see section 4A), so it is NOT lower priority.
 
-- 0–7 days = VERY HIGH VALUE
-- 8–14 days = HIGH VALUE
-- 15–30 days = USEFUL
-- 31–60 days = LOWER PRIORITY
+- 0–19 days = GOOD (fresh signal)
+- 20–60 days and confirmed still live = HIGH VALUE (agency-likely)
 - 60+ days = normally exclude unless there is strong evidence the vacancy remains genuinely active.
+
+For anything 20+ days old, confirm the posting is still live before enriching anyone.
 
 Do not reference a vacancy as "new" or "recent" unless that description is factually justified.
 
@@ -662,7 +702,11 @@ Triggered by "combine all unverified runs" (or "combine runs X and Y").
 **Step 2: process the MillionVerifier results.**
 Triggered by "process my MillionVerifier results for <batch_id or run_id>". Mustapha attaches the MillionVerifier result file or puts it in that batch's folder in `2 - Verified`.
 1. Match each result row to the combined/ALL file by email.
-2. **Keep** only emails MillionVerifier marks good/ok/valid. **Remove** invalid, disposable and bad results. **Hold back** catch-all/accept-all, risky and unknown results in `<batch_id>_HELD_BACK_catchall_unknown.csv` for Mustapha to decide on, never in Instantly files.
+   Mustapha sends the MillionVerifier **combined list (green + yellow)**. Any email in the combined/ALL file that is missing from that list is treated as red (invalid/does not exist).
+2. **Keep** only emails MillionVerifier marks good/ok/valid (green). **Hold back** catch-all/accept-all, risky and unknown results (yellow) in `<batch_id>_HELD_BACK_catchall_unknown.csv` for Mustapha to decide on, never in Instantly files. **Red** emails are removed, then:
+   - **Red retry with FullEnrich (approved by Mustapha 2026-10-08):** only for reds whose email came from Apollo (`email_source = apollo`; for older runs without that column, check the run's MASTER_research file and ask Mustapha if still unclear). Give a FullEnrich credit estimate and get Mustapha's yes first; never pay or top up. If FullEnrich returns a DIFFERENT deliverable email, put those contacts in `<batch_id>_RETRY_for_MillionVerifier.csv` in the batch folder; they join the Instantly files only after that small file passes MillionVerifier (green). If FullEnrich returns the same email, nothing, or catch-all/risky → drop the contact.
+   - Reds whose email already came from FullEnrich are dropped, not retried.
+   - Log dropped reds as `removed` and retried ones as `retried_fullenrich` in the Verification results tab.
 3. Build the final files, one per specialism and wave, only where non-empty: `<batch_id>_<CAMPAIGN>_WAVE1_ready_for_Instantly.csv` (P1/P2) and `<batch_id>_<CAMPAIGN>_WAVE2_ready_for_Instantly.csv` (P3–P5). These use the campaign-ready columns in section 25, so the Instantly mapping never changes. A batch covering several runs still produces at most 5 campaigns × 2 waves.
 4. Save them, plus the MillionVerifier result, in the batch's subfolder in `2 - Verified` (create the subfolder if it doesn't exist; for a single run it is named the run_id). Also hand them over as downloads.
 5. Append one row per email to the MASTER Log tab `Verification results` (run_id = the row's own run_id, verified_date, email, campaign_name, millionverifier_result, action = kept / removed / held_back). Never edit earlier rows.
