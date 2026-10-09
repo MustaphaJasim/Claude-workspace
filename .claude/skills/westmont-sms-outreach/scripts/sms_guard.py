@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import smslib as L  # noqa: E402
+import compliance as C  # noqa: E402
 
 SEND_TOOL = "mcp__ringover__sms_send"
 OPTOUT_REMOVE_TOOL = "mcp__ringover__sms_opt_out_remove"
@@ -71,7 +72,52 @@ def parse_commands(prompt):
             cmds.append((verb, code, sel))
         for m in re.finditer(r"\bretry\s+([A-Z]\d{4}[A-Z]-\d{2})\b", line, re.I):
             cmds.append(("retry", m.group(1).upper(), None))
+        m = CLEAR_RE.match(line)
+        if m:
+            cmds.append(("clearance", _norm_key(m.group(1)), (m.group(2).strip(), m.group(3))))
+        m = REVOKE_RE.match(line)
+        if m:
+            cmds.append(("revoke", _norm_key(m.group(1)), None))
     return cmds
+
+
+_KEY = r"(tx302-registered|tx302-customer-exemption|carrier-cold-b2b|state-[a-z]{2}|msg-[a-z]\d{4}[a-z]-\d{2})"
+# e.g. "clearance tx302-registered: certificate #12345 issued 2026-10-20 until 2027-10-20"
+CLEAR_RE = re.compile(r"^\s*clearance\s+" + _KEY + r"\s*:\s*(.{10,}?)\s*(?:\buntil\s+(\d{4}-\d{2}-\d{2}))?\s*$",
+                      re.I)
+REVOKE_RE = re.compile(r"^\s*revoke\s+clearance\s+" + _KEY + r"\b", re.I)
+
+
+def _norm_key(k):
+    k = k.lower()
+    if k.startswith("state-"):
+        return "state-" + k[6:].upper()
+    if k.startswith("msg-"):
+        return "msg-" + k[4:].upper()
+    return k
+
+
+def _record_clearance(conn, key, evidence, until, now):
+    if key.startswith("msg-"):
+        m = L.get_msg(conn, key[4:])
+        if not m:
+            return f"clearance {key}: no such message; nothing recorded"
+        res = C.assess(conn, m, now, L.msg_hash(m))
+        if res["status"] == C.PROHIBITED:
+            return (f"clearance {key}: refused - the message is PROHIBITED on the recorded facts."
+                    " A clearance can only resolve REVIEW_REQUIRED; correct the facts instead.")
+        bound = L.msg_hash(m)
+        default_days = 30
+    else:
+        bound = None
+        default_days = 365
+    expires = until or L.iso(now + timedelta(days=default_days))[:10]
+    conn.execute("INSERT OR REPLACE INTO clearances(key, evidence, granted_at, expires_at, revoked_at,"
+                 " bound_hash, source) VALUES(?,?,?,?,NULL,?,?)",
+                 (key, evidence, L.iso(now), expires, bound, "user"))
+    L.log_event(conn, "user", "CLEARANCE_RECORDED", batch_id=None,
+                detail={"key": key, "evidence": evidence, "expires": expires})
+    return f"clearance {key}: RECORDED (expires {expires}) - evidence: {evidence}"
 
 
 def handle_prompt(data, conn, now=None):
@@ -84,6 +130,15 @@ def handle_prompt(data, conn, now=None):
     conn.execute("BEGIN IMMEDIATE")
     try:
         for verb, code, sel in cmds:
+            if verb == "clearance":
+                notes.append(_record_clearance(conn, code, sel[0], sel[1], now))
+                continue
+            if verb == "revoke":
+                cur = conn.execute("UPDATE clearances SET revoked_at=? WHERE key=? AND revoked_at IS NULL",
+                                   (L.iso(now), code))
+                L.log_event(conn, "user", "CLEARANCE_REVOKED", detail={"key": code})
+                notes.append(f"clearance {code}: " + ("REVOKED" if cur.rowcount else "was not active"))
+                continue
             if verb == "retry":
                 m = L.get_msg(conn, code)
                 if not m:
@@ -130,6 +185,11 @@ def handle_prompt(data, conn, now=None):
                     notes.append(f"{it['msg_id']}: status {m['status']}; NOT {verb}d")
                     continue
                 if verb == "approve":
+                    legal = C.assess(conn, m, now, L.msg_hash(m))
+                    if legal["status"] not in C.SENDABLE:
+                        notes.append(f"{m['msg_id']}: NOT approved - legal status {legal['status']}"
+                                     f" ({'; '.join(legal['reasons'])})")
+                        continue
                     m = L.update_msg(conn, m["msg_id"], status=L.APPROVED, approved_hash=it["hash"],
                                      approved_at=L.iso(now),
                                      approval_expires=L.iso(now + timedelta(hours=L.APPROVAL_TTL_HOURS)))

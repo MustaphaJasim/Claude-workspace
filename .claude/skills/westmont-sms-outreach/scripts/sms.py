@@ -32,11 +32,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import smslib as L  # noqa: E402
+import compliance as C  # noqa: E402
 
 FIELDS = ["msg_id", "batch_id", "line", "version", "status", "recipient_name", "company", "title",
           "phone", "audience", "purpose", "consent_basis", "hubspot_contact_id", "tz_override",
           "content", "segments", "encoding", "attempts", "submitted_at", "ringover_message_id",
-          "ringover_conversation_id", "hubspot_note_id", "context_note", "created_at", "updated_at"]
+          "ringover_conversation_id", "hubspot_note_id", "context_note", "created_at", "updated_at", "compliance_json"]
+CLEAR_FIELDS = ["key", "evidence", "granted_at", "expires_at", "revoked_at", "source"]
 
 
 def die(msg):
@@ -113,13 +115,27 @@ def cmd_restore(conn, a):
         if r.get("phone") and r["phone"] != "phone":
             conn.execute("INSERT OR IGNORE INTO optouts(phone, source, added_at) VALUES(?,?,?)",
                          (L.normalize_phone(r["phone"])[0] or str(r["phone"]), r.get("source"), r.get("added_at")))
+    # Global legal clearances (Texas registration, carrier, state-XX) come back so the
+    # rules keep working; they are marked "restored" and listed on every review
+    # table. Per-message clearances (msg-...) are never restored, like approvals.
+    nc = 0
+    for row in data.get("clearances", []):
+        r = row if isinstance(row, dict) else dict(zip(CLEAR_FIELDS, row))
+        k = str(r.get("key") or "")
+        if not k or k == "key" or k.startswith("msg-") or r.get("revoked_at"):
+            continue
+        conn.execute("INSERT OR REPLACE INTO clearances(key, evidence, granted_at, expires_at, revoked_at,"
+                     " bound_hash, source) VALUES(?,?,?,?,NULL,NULL,'restored')",
+                     (k, r.get("evidence"), r.get("granted_at"), r.get("expires_at")))
+        nc += 1
     L.set_meta(conn, "ledger_ready", "yes")
     L.set_meta(conn, "ready_at", L.iso(L.utcnow()))
     L.set_meta(conn, "ready_via", f"restore:{Path(a.file).name}")
     L.log_event(conn, "cli", "LEDGER_RESTORED", detail={"messages": n, "optouts": len(optouts)})
     conn.execute("UPDATE events SET synced=1")  # restored history is already in the Sheet
     conn.execute("COMMIT")
-    print(f"restored {n} messages, {len(optouts)} opt-outs. Approvals were not restored (by design).")
+    print(f"restored {n} messages, {len(optouts)} opt-outs, {nc} global clearances."
+          " Approvals and per-message clearances were not restored (by design).")
 
 
 def cmd_new_batch(conn, a):
@@ -138,6 +154,34 @@ def cmd_new_batch(conn, a):
     print(bid)
 
 
+FACT_KEYS = ["relationship", "relationship_date", "line_use", "line_use_source", "dnc_status",
+             "dnc_checked_on", "dnc_source", "states"]
+
+
+def _facts(rec):
+    """Legal facts for a client text (see compliance.py). Stored as canonical JSON
+    so the approval hash changes whenever any fact changes."""
+    f = {k: rec.get(k) for k in FACT_KEYS if rec.get(k) not in (None, "", [])}
+    f["relationship"] = rec.get("relationship") or rec.get("consent_basis")
+    if isinstance(f.get("states"), str):
+        f["states"] = [s.strip().upper() for s in f["states"].split(",") if s.strip()]
+    return json.dumps(f, sort_keys=True)
+
+
+def _fact_problems(rec):
+    probs = []
+    if rec.get("line_use") and rec["line_use"] not in C.LINE_USE:
+        probs.append(f"line_use must be one of {sorted(C.LINE_USE)}")
+    if rec.get("dnc_status") and rec["dnc_status"] not in C.DNC:
+        probs.append(f"dnc_status must be one of {sorted(C.DNC)}")
+    for k in ("relationship_date", "dnc_checked_on"):
+        if rec.get(k) and not C._d(rec[k]):
+            probs.append(f"{k} must be YYYY-MM-DD")
+    if rec.get("dnc_status") in ("registered", "not_registered") and not rec.get("dnc_checked_on"):
+        probs.append("dnc_status given without dnc_checked_on date")
+    return probs
+
+
 def _validate(rec, audience):
     probs = []
     phone, err = L.normalize_phone(rec.get("phone"))
@@ -145,9 +189,13 @@ def _validate(rec, audience):
         probs.append(err)
     if not (rec.get("name") or "").strip():
         probs.append("missing recipient name")
+    if audience == "client":
+        rec["consent_basis"] = rec.get("relationship") or rec.get("consent_basis")
+        probs.extend(_fact_problems(rec))
     basis = rec.get("consent_basis")
+    key = "relationship" if audience == "client" else "consent_basis"
     if basis not in L.CONSENT[audience]:
-        probs.append(f"consent_basis must be one of {sorted(L.CONSENT[audience])}")
+        probs.append(f"{key} must be one of {sorted(L.CONSENT[audience])}")
     elif not L.CONSENT[audience][basis]:
         probs.append(f"consent_basis '{basis}' is not allowed for {audience}s - do not text")
     if audience == "client" and not rec.get("hubspot_contact_id"):
@@ -186,11 +234,11 @@ def cmd_add(conn, a):
         conn.execute(
             "INSERT INTO messages(msg_id,batch_id,line,version,recipient_name,company,title,phone,audience,"
             "purpose,consent_basis,context_note,hubspot_contact_id,tz_override,content,segments,encoding,"
-            "status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "status,created_at,updated_at,compliance_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (mid, a.batch, line, 1, rec["name"].strip(), rec.get("company"), rec.get("title"), phone,
              b["audience"], rec.get("purpose") or b["purpose"], rec["consent_basis"], rec.get("context"),
              rec.get("hubspot_contact_id"), rec.get("tz"), text, seg["segments"], seg["encoding"],
-             L.DRAFT, now, now))
+             L.DRAFT, now, now, _facts(rec) if b["audience"] == "client" else None))
         L.log_event(conn, "cli", "DRAFTED", L.get_msg(conn, mid))
         warn = []
         if changed:
@@ -236,14 +284,97 @@ def cmd_remove(conn, a):
     print(f"{a.msg_id} cancelled")
 
 
-def _table(rows, with_status=True):
-    out = ["| # | ID | Recipient | Company | Phone | Message | Seg | Consent | Status |",
-           "|---|---|---|---|---|---|---|---|---|"]
+def _legal(conn, r):
+    return C.assess(conn, r, L.utcnow(), L.msg_hash(r))
+
+
+def _table(conn, rows):
+    out = ["| # | ID | Recipient | Company | Phone | Message | Seg | Basis | Legal | Status |",
+           "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         msg = r["content"].replace("\n", " / ").replace("|", "/")
+        lg = _legal(conn, r)["status"]
         out.append(f"| {r['line']} | {r['msg_id']} v{r['version']} | {r['recipient_name']} | {r['company'] or '-'} |"
-                   f" {r['phone']} | {msg} | {r['segments']} | {r['consent_basis']} | {r['status']} |")
+                   f" {r['phone']} | {msg} | {r['segments']} | {r['consent_basis']} | {lg} | {r['status']} |")
     return "\n".join(out)
+
+
+def _legal_notes(conn, rows):
+    out = []
+    for r in rows:
+        if r["audience"] != "client":
+            continue
+        lg = _legal(conn, r)
+        line = f"- #{r['line']} {r['msg_id']}: **{lg['status']}**"
+        if lg["reasons"]:
+            line += " - needs: " + "; ".join(lg["reasons"])
+        if lg["exemptions"]:
+            line += " - exemptions: " + "; ".join(lg["exemptions"])
+        out.append(line)
+    return out
+
+
+def _clearance_lines(conn):
+    clear = C.active_clearances(conn, L.utcnow())
+    return [f"- {k} (until {v['expires_at']}, {v['source']}): {v['evidence']}" for k, v in clear.items()
+            if not k.startswith("msg-")]
+
+
+def cmd_compliance(conn, a):
+    """Record/update the legal facts for a client message. New version; approval void."""
+    m = L.get_msg(conn, a.msg_id)
+    if not m or m["audience"] != "client":
+        die("compliance facts apply to client messages only")
+    if m["status"] in L.SENT_LIKE | {L.RINGOVER_FAILED, L.NOT_FOUND, L.CANCELLED}:
+        die(f"cannot change a message with status {m['status']}")
+    f = json.loads(m["compliance_json"] or "{}")
+    for k in FACT_KEYS:
+        v = getattr(a, k, None)
+        if v is not None:
+            f[k] = v
+    probs = _fact_problems(f) + ([] if f.get("relationship") in C.RELATIONSHIPS else
+                                 [f"relationship must be one of {sorted(C.RELATIONSHIPS)}"])
+    if probs:
+        die("; ".join(probs))
+    cj = _facts(f)
+    m = L.update_msg(conn, a.msg_id, compliance_json=cj, consent_basis=f["relationship"],
+                     version=m["version"] + 1, status=L.DRAFT, approved_hash=None, approved_at=None,
+                     approval_expires=None, presented_hash=None)
+    L.log_event(conn, "cli", "COMPLIANCE_FACTS", m, detail=json.loads(cj))
+    lg = _legal(conn, m)
+    print(f"{a.msg_id} v{m['version']} facts recorded -> {C.short(lg)}")
+
+
+def cmd_legal_review(conn, a):
+    rows = conn.execute("SELECT * FROM messages WHERE batch_id=? AND audience='client' AND status NOT IN (?,?)"
+                        " ORDER BY line", (a.batch, L.CANCELLED, L.BLOCKED_OPTOUT)).fetchall()
+    print(f"# Legal review request - batch {a.batch} ({L.iso(L.utcnow())})\n")
+    print("Sender: Westmont Global Ltd (UK), Ringover US 10DLC number +1 945-363-7786.")
+    print("Method: each text individually written, reviewed and sent one at a time (no autodialer).")
+    print("Purpose: B2B recruitment services to hiring managers.\n")
+    print("Recorded clearances:\n" + ("\n".join(_clearance_lines(conn)) or "- none"))
+    for r in rows:
+        lg = _legal(conn, r)
+        if lg["status"] in C.SENDABLE and not a.all:
+            continue
+        f = json.loads(r["compliance_json"] or "{}")
+        print(f"\n## {r['msg_id']} - {lg['status']}")
+        print(f"- Recipient: {r['title'] or ''} at {r['company'] or '?'}; states: "
+              f"{', '.join(C.states_for(r['phone'], f)) or 'unknown'} (number not shown)")
+        print(f"- Facts: relationship={f.get('relationship')} ({f.get('relationship_date') or 'no date'}),"
+              f" line use={f.get('line_use', 'unknown')} [{f.get('line_use_source', 'no source')}],"
+              f" National DNC={f.get('dnc_status', 'not_checked')} ({f.get('dnc_checked_on') or 'never'})")
+        print(f"- Message: \"{r['content']}\"")
+        for x in lg["reasons"]:
+            print(f"- Open question: {x}")
+        for x in lg["exemptions"]:
+            print(f"- Relying on: {x}")
+
+
+def cmd_clearances(conn, a):
+    for r in conn.execute("SELECT * FROM clearances ORDER BY key"):
+        st = "REVOKED" if r["revoked_at"] else ("expired" if C._d(r["expires_at"]) < L.utcnow() else "active")
+        print(f"{r['key']}: {st}, until {r['expires_at']}, {r['source']}: {r['evidence']}")
 
 
 def cmd_present(conn, a):
@@ -270,13 +401,22 @@ def cmd_present(conn, a):
     conn.execute("COMMIT")
     rows = conn.execute("SELECT * FROM messages WHERE batch_id=? AND status IN (?,?) ORDER BY line",
                         (a.batch, L.PRESENTED, L.APPROVED)).fetchall()
-    print(_table(rows))
+    print(_table(conn, rows))
+    notes = _legal_notes(conn, rows)
+    if notes:
+        print("\nLegal check (only PERMITTED or EXEMPT rows can be approved):")
+        print("\n".join(notes))
+        cl = _clearance_lines(conn)
+        print("Recorded clearances:\n" + ("\n".join(cl) if cl else "- none"))
     print(f"\nREVIEW CODE: {code}  (valid {L.PRESENTATION_TTL_HOURS}h; replaces any earlier code for {a.batch})")
 
 
 def cmd_show(conn, a):
     rows = conn.execute("SELECT * FROM messages WHERE batch_id=? ORDER BY line", (a.batch,)).fetchall()
-    print(_table(rows))
+    print(_table(conn, rows))
+    notes = _legal_notes(conn, rows)
+    if notes:
+        print("\n" + "\n".join(notes))
 
 
 def yn(v):
@@ -366,7 +506,9 @@ def cmd_sync_export(conn, a):
     opt = [[r["phone"], r["source"], r["added_at"]] for r in conn.execute("SELECT * FROM optouts")]
     ev = [[r["event_id"], r["ts"], r["actor"], r["batch_id"], r["msg_id"], r["version"], r["event"],
            r["status_after"], r["detail"]] for r in conn.execute("SELECT * FROM events WHERE synced=0 ORDER BY event_id")]
+    cl = [[r[k] for k in CLEAR_FIELDS] for r in conn.execute("SELECT * FROM clearances ORDER BY key")]
     print(json.dumps({"messages_header": FIELDS, "messages": msgs,
+                      "clearances_header": CLEAR_FIELDS, "clearances": cl,
                       "optouts_header": ["phone", "source", "added_at"], "optouts": opt,
                       "events_header": ["event_id", "ts", "actor", "batch_id", "msg_id", "version", "event",
                                         "status_after", "detail"], "new_events": ev,
@@ -398,6 +540,11 @@ def main():
     x = s.add_parser("optout-add"); x.add_argument("phone"); x.add_argument("--source", required=True)
     s.add_parser("sync-export")
     x = s.add_parser("sync-mark"); x.add_argument("event_id", type=int)
+    x = s.add_parser("compliance"); x.add_argument("msg_id")
+    for k in FACT_KEYS:
+        x.add_argument("--" + k.replace("_", "-"), dest=k)
+    x = s.add_parser("legal-review"); x.add_argument("batch"); x.add_argument("--all", action="store_true")
+    s.add_parser("clearances")
     a = p.parse_args()
     conn = L.connect()
     globals()["cmd_" + a.cmd.replace("-", "_")](conn, a)

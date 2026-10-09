@@ -270,10 +270,10 @@ class TestSendRules(Base):
         ok, reasons, _ = self.ok_now(f"{bid2}-01", last="2026-10-01T15:00:00Z")
         self.assertTrue(ok, reasons)
 
-    def test_cold_client_blocked_and_candidate_not_in_hubspot(self):
+    def test_client_rules_and_candidate_not_in_hubspot(self):
         bid, out = self.batch([rec(consent_basis="cold", hubspot_contact_id="123")], audience="client",
                               purpose="prospecting")
-        self.assertIn("SKIPPED", out)
+        self.assertIn("SKIPPED", out)           # 'cold' is not a relationship value; 'none' is
         bid, out = self.batch([rec(hubspot_contact_id="123")])
         self.assertIn("must not be linked to HubSpot", out)
         bid, out = self.batch([rec(consent_basis="prior_conversation")], audience="client", purpose="follow_up")
@@ -380,6 +380,195 @@ class TestSegments(unittest.TestCase):
         t, changed = L.clean_text("It’s great — thanks")
         self.assertEqual(t, "It's great - thanks")
         self.assertEqual(L.segment_info(t)["encoding"], "GSM-7")
+
+
+# ---------------------------------------------------------------------------
+# Legal rules engine for client (B2B) texts
+# ---------------------------------------------------------------------------
+sys.path.insert(0, str(SCRIPTS))
+import compliance as C  # noqa: E402
+
+CTXT = ("Hi Sam, Mustapha at Westmont Global. We place substation and P&C engineers in Texas. "
+        "Open to a quick call? Reply STOP to opt out")
+TODAY = L.utcnow().strftime("%Y-%m-%d")
+
+
+def days_ago(n):
+    return (L.utcnow() - timedelta(days=n)).strftime("%Y-%m-%d")
+
+
+def crec(phone="(713) 321-0177", **kw):
+    r = {"name": "Sam Client", "phone": phone, "company": "Grid Co", "title": "Director",
+         "hubspot_contact_id": "555", "relationship": "none", "line_use": "business",
+         "line_use_source": "company website", "dnc_status": "not_registered",
+         "dnc_checked_on": TODAY, "dnc_source": "DNC scrub", "text": CTXT}
+    r.update(kw)
+    return r
+
+
+class TestLegalEngine(Base):
+    def client(self, **kw):
+        bid, out = self.batch([crec(**kw)], audience="client", purpose=kw.pop("purpose", "prospecting"))
+        return f"{bid}-01", out
+
+    def legal(self, mid):
+        c = self.conn()
+        m = L.get_msg(c, mid)
+        return C.assess(c, m, L.utcnow(), L.msg_hash(m))
+
+    def test_area_code_state_map_complete(self):
+        self.assertEqual(set(L.AREA_TZ) - set(C.AREA_STATE), set())
+        self.assertEqual(set(C.AREA_STATE) - set(L.AREA_TZ), set())
+
+    def test_cold_texas_needs_registration_and_carrier(self):
+        mid, _ = self.client()
+        r = self.legal(mid)
+        self.assertEqual(r["status"], C.REVIEW)
+        self.assertTrue(any("Texas ch. 302" in x for x in r["reasons"]))
+        self.assertTrue(any("carrier" in x for x in r["reasons"]))
+        self.say("clearance tx302-registered: certificate 2026-123 issued 2026-10-20")
+        self.say("clearance carrier-cold-b2b: Ringover support ticket 4567 confirmed")
+        r = self.legal(mid)
+        self.assertEqual(r["status"], C.EXEMPT, r)
+
+    def test_texas_customer_exemption_needs_two_year_confirmation(self):
+        mid, _ = self.client(relationship="current_client", relationship_date=days_ago(60))
+        r = self.legal(mid)
+        self.assertEqual(r["status"], C.REVIEW)          # federal EBR ok, Texas not yet
+        self.assertTrue(any("302.058" in x for x in r["reasons"]))
+        self.say("clearance tx302-customer-exemption: trading as Westmont Global since 2021")
+        self.assertEqual(self.legal(mid)["status"], C.EXEMPT)
+
+    def test_washington_is_prohibited_and_cannot_be_cleared(self):
+        mid, _ = self.client(phone="(206) 321-0177")
+        self.assertEqual(self.legal(mid)["status"], C.PROHIBITED)
+        ctx = self.say(f"clearance msg-{mid}: counsel says fine")
+        self.assertIn("refused", json.dumps(ctx))
+        self.assertEqual(self.legal(mid)["status"], C.PROHIBITED)
+
+    def test_dnc_registered(self):
+        mid, _ = self.client(phone="(813) 321-0177", dnc_status="registered", line_use="personal")
+        self.assertEqual(self.legal(mid)["status"], C.PROHIBITED)
+        mid2, _ = self.client(phone="(813) 321-0178", dnc_status="registered", line_use="business")
+        r = self.legal(mid2)
+        self.assertEqual(r["status"], C.REVIEW)
+        self.say("clearance carrier-cold-b2b: Ringover confirmed in writing")
+        self.say(f"clearance msg-{mid2}: counsel J. Doe approved business-line text 2026-10-12")
+        self.assertEqual(self.legal(mid2)["status"], C.EXEMPT)
+        # changing the message afterwards voids the per-message clearance
+        self.cli("edit", mid2, "--text", CTXT + " Thanks")
+        self.assertEqual(self.legal(mid2)["status"], C.REVIEW)
+
+    def test_recent_inquiry_in_florida_is_exempt_without_dnc_or_carrier(self):
+        mid, _ = self.client(phone="(813) 321-0177", relationship="inquiry",
+                             relationship_date=days_ago(30), dnc_status="not_checked", dnc_checked_on=None)
+        r = self.legal(mid)
+        self.assertEqual(r["status"], C.EXEMPT, r)
+
+    def test_old_inquiry_loses_ebr(self):
+        mid, _ = self.client(phone="(813) 321-0177", relationship="inquiry",
+                             relationship_date=days_ago(120), dnc_status="not_checked", dnc_checked_on=None)
+        r = self.legal(mid)
+        self.assertEqual(r["status"], C.REVIEW)
+        self.assertTrue(any("National DNC" in x for x in r["reasons"]))
+
+    def test_stale_dnc_scrub(self):
+        mid, _ = self.client(phone="(813) 321-0177", dnc_checked_on=days_ago(40))
+        self.assertTrue(any("older than 31" in x for x in self.legal(mid)["reasons"]))
+
+    def test_unverified_state_until_counsel_clears(self):
+        mid, _ = self.client(phone="(614) 321-0177")          # Ohio
+        self.say("clearance carrier-cold-b2b: Ringover confirmed in writing")
+        r = self.legal(mid)
+        self.assertEqual(r["status"], C.REVIEW)
+        self.assertTrue(any("OH" in x for x in r["reasons"]))
+        self.say("clearance state-OH: counsel memo 2026-10-15 cold B2B texts ok")
+        self.assertEqual(self.legal(mid)["status"], C.EXEMPT)
+        self.say("revoke clearance state-OH")
+        self.assertEqual(self.legal(mid)["status"], C.REVIEW)
+
+    def test_extra_state_from_company_location_applies(self):
+        mid, _ = self.client(phone="(813) 321-0177", states=["WA"])
+        self.assertEqual(self.legal(mid)["status"], C.PROHIBITED)
+
+    def test_review_message_cannot_be_approved(self):
+        mid, _ = self.client()
+        code = self.present(mid[:6])
+        ctx = self.say(f"approve {code}")
+        self.assertIn("NOT approved - legal status REVIEW_REQUIRED", json.dumps(ctx))
+        self.assertEqual(self.status(mid), "PRESENTED")
+
+    def test_cleared_message_approves_and_fact_change_voids_it(self):
+        mid, _ = self.client()
+        self.say("clearance tx302-registered: certificate 2026-123")
+        self.say("clearance carrier-cold-b2b: Ringover confirmed in writing")
+        code = self.present(mid[:6])
+        self.say(f"approve {code}")
+        self.assertEqual(self.status(mid), "APPROVED")
+        self.cli("compliance", mid, "--dnc-status", "registered", "--dnc-checked-on", TODAY)
+        self.assertEqual(self.status(mid), "DRAFT")
+
+    def test_send_rules_for_cold_b2b(self):
+        if not in_window("+17133210177"):
+            self.skipTest("Houston sending window closed right now")
+        self.say("clearance tx302-registered: certificate 2026-123")
+        self.say("clearance carrier-cold-b2b: Ringover confirmed in writing")
+        # missing Mustapha/Westmont identification -> blocked at send
+        mid, _ = self.client(text="Hi Sam, we place P&C engineers in Texas. Quick call? Reply STOP to opt out")
+        code = self.present(mid[:6])
+        self.say(f"approve {code}")
+        self.precheck(mid)
+        res, _ = self.send(mid)
+        self.assertEqual(self.decision(res), "deny")
+        self.assertIn("name Mustapha and Westmont", self.reason(res))
+        # properly identified cold text -> passes guard, still asks Ringover prompt
+        mid2, _ = self.client(phone="(713) 321-0188")
+        code = self.present(mid2[:6])
+        self.say(f"approve {code}")
+        self.precheck(mid2)
+        res, ti = self.send(mid2)
+        self.assertEqual(self.decision(res), "ask", res)
+
+    def test_cold_cap_two_per_30_days(self):
+        c = self.conn()
+        mid, _ = self.client(phone="(813) 321-0199")
+        for i, days in enumerate((10, 3)):
+            c.execute("INSERT INTO messages(msg_id,batch_id,line,version,recipient_name,phone,audience,purpose,"
+                      "consent_basis,content,status,submitted_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      (f"Z0000Z-0{i}", "Z0000Z", i, 1, "x", "+18133210199", "client", "prospecting", "none",
+                       f"old {i}", "SUBMITTED", L.iso(L.utcnow() - timedelta(days=days)),
+                       L.iso(L.utcnow() - timedelta(days=days))))
+        self.say("clearance carrier-cold-b2b: Ringover confirmed in writing")
+        code = self.present(mid[:6])
+        self.say(f"approve {code}")
+        ok, reasons, _ = TestSendRules.ok_now(self, mid)
+        self.assertTrue(any("max 2 texts in 30 days" in r for r in reasons), reasons)
+
+    def test_clearance_syntax_is_strict(self):
+        self.say("I think we have a clearance tx302-registered: probably fine")   # not at line start
+        self.say("clearance tx302-registered: ok")                                 # evidence too short
+        self.assertEqual(self.cli("clearances").strip(), "")
+
+    def test_restore_keeps_global_but_not_message_clearances(self):
+        mid, _ = self.client(phone="(813) 321-0178", dnc_status="registered", line_use="business")
+        self.say("clearance carrier-cold-b2b: Ringover confirmed in writing")
+        self.say(f"clearance msg-{mid}: counsel approved this one")
+        export = json.loads(self.cli("sync-export"))
+        f = os.path.join(self.tmp.name, "r.json")
+        Path(f).write_text(json.dumps({"messages": export["messages"], "optouts": [],
+                                       "clearances": export["clearances"]}))
+        os.remove(self.db)
+        self.cli("restore", f)
+        out = self.cli("clearances")
+        self.assertIn("carrier-cold-b2b: active", out)
+        self.assertNotIn("msg-", out)
+        self.assertEqual(self.legal(mid)["status"], C.REVIEW)
+
+    def test_legal_review_memo(self):
+        mid, _ = self.client(phone="(614) 321-0177")
+        out = self.cli("legal-review", mid[:6])
+        self.assertIn("Open question", out)
+        self.assertNotIn("+16143210177", out)          # memo does not expose the number
 
 
 if __name__ == "__main__":

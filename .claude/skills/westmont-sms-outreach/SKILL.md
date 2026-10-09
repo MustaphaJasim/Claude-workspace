@@ -35,9 +35,9 @@ Never call the guard script, sqlite3, or the ledger file directly (the hook bloc
 ## Step 0: restore the ledger (start of every session that uses SMS)
 
 1. `$SMS status`. If `ready: True`, skip to step 1.
-2. Read the Sheet: `Messages!A1:Y`, `OptOuts!A1:C`.
+2. Read the Sheet: `Messages!A1:Z`, `OptOuts!A1:C`, `Clearances!A1:F`.
 3. If Messages has only the header row, run `$SMS init --fresh`. Otherwise write
-   `{"messages": [rows without header], "optouts": [rows without header]}` to the
+   `{"messages": [...], "optouts": [...], "clearances": [...]}` (rows without headers) to the
    scratchpad and run `$SMS restore <file>`. Approvals are never restored (by design), and
    anything mid-send comes back UNCERTAIN.
 
@@ -55,11 +55,24 @@ Never call the guard script, sqlite3, or the ledger file directly (the hook bloc
   name/phone). Record `hubspot_contact_id`. **Never create** HubSpot contacts. No match means
   tell him, and don't text.
 - **Candidates** never go into HubSpot (no create, no update, no lookup-and-link).
-- Consent basis (required, shown in the review table):
-  - candidate: `provided_number` | `prior_conversation` | `applied` | `referral` | `sourced`
-  - client: `existing_client` | `prior_conversation` | `requested_contact` | `written_consent`
-  - `cold` or `unknown` is **blocked**. Having a number is not consent. Cold promotional
-    texting of clients is not done through this system.
+- **Candidates**, consent basis (required, shown in the table): `provided_number` |
+  `prior_conversation` | `applied` | `referral` | `sourced` (`unknown` is blocked).
+- **Clients (B2B), legal facts** (required; the rules engine `scripts/compliance.py` turns
+  them into PERMITTED / EXEMPT / REVIEW_REQUIRED / PROHIBITED; see
+  `reference/legal-basis.md`). Record only what you can evidence:
+  - `relationship`: `current_client` | `former_client` | `inquiry` | `written_consent` |
+    `prior_conversation` | `none` (cold), plus `relationship_date` (YYYY-MM-DD of the last
+    transaction, inquiry or consent). Don't stretch a call into an "inquiry": an inquiry
+    means *they* asked about Westmont's services.
+  - `line_use`: `business` | `mixed` | `personal` | `unknown`, plus `line_use_source`
+    (e.g. "listed on company site as direct mobile"). A data vendor saying "mobile"
+    doesn't make it business.
+  - `dnc_status`: `not_registered` | `registered` | `not_checked`, plus `dnc_checked_on`
+    and `dnc_source`. **Claude has no National DNC lookup tool.** Use only results
+    Mustapha (or a scrub service he uses) provides. Otherwise `not_checked`.
+  - `states`: company/HubSpot state if known (added to the area-code state).
+  - Having a number is never consent. The engine, not you, decides what's allowed. Don't
+    pick facts to get a better result.
 - Check Ringover history per number: `conversations_list`, then find the conversation whose
   external number matches, then `conversations_messages_list`. Note `is_opt_out`, the last
   outbound date, and any reply.
@@ -73,7 +86,11 @@ Never call the guard script, sqlite3, or the ledger file directly (the hook bloc
 - **Candidates:** the opportunity, the specialism (e.g. relay testing, P&C, substation design,
   SCADA, BESS, data center electrical), location/contract type if known, one simple next step.
 - **Clients:** a real reason to text: an existing conversation, resumes already sent, a
-  concrete hiring need he told you about. Never invent one.
+  concrete hiring need he told you about, or (cold) a genuine, specific reason relevant
+  to their work. Never invent one. **Every client solicitation** must name Mustapha and
+  Westmont and include "Reply STOP to opt out" (the FCC requires caller identification).
+  The guard enforces this. Purpose `client_service` (interview times, offer status on a
+  live engagement with a current client) is the only non-marketing client purpose.
 - Personalize only with facts you actually have. Don't force it.
 - **First text to any number** must say it's from Westmont (e.g. "Mustapha at Westmont
   Global") and include "Reply STOP to opt out". The guard enforces this.
@@ -84,12 +101,16 @@ Never call the guard script, sqlite3, or the ledger file directly (the hook bloc
 
 1. `$SMS new-batch --audience candidate|client --purpose <p> --desc "<what it's about>"`
    - candidate purposes: opportunity, follow_up, reply, availability_check
-   - client purposes: follow_up, reply, existing_conversation, prospecting
+   - client purposes: prospecting, follow_up, reply, existing_conversation, client_service
 2. Write a JSON list to the scratchpad, one object per recipient:
-   `{"name","phone","company","title","consent_basis","hubspot_contact_id"(clients only),
-   "context","tz"(only if the area code isn't known),"text","purpose"(optional)}`, then run
-   `$SMS add <BATCH> <file>`. Report every SKIPPED line and the reason.
-3. `$SMS present <BATCH>`, then show Mustapha the table exactly as printed, plus:
+   `{"name","phone","company","title","consent_basis"(candidates),"hubspot_contact_id"(clients only),
+   "context","tz"(only if the area code isn't known),"text","purpose"(optional)}`, plus for
+   clients `"relationship","relationship_date","line_use","line_use_source","dnc_status",
+   "dnc_checked_on","dnc_source","states"`. Then run `$SMS add <BATCH> <file>`. Report every
+   SKIPPED line and the reason. Facts learned later: `$SMS compliance <MSG_ID> --dnc-status ...`
+   (this creates a new version and voids any approval).
+3. `$SMS present <BATCH>`, then show Mustapha the table exactly as printed (including the
+   **Legal** column and the legal notes; only PERMITTED/EXEMPT rows can be approved), plus:
    - what's missing or skipped, segments/cost notes, and for clients: "each sent text will be
      logged as a Note on the HubSpot contact"
    - the **review code** and how to answer:
@@ -100,6 +121,32 @@ Never call the guard script, sqlite3, or the ledger file directly (the hook bloc
    carries over.
 5. After he answers, the hook adds a "[Westmont SMS guard]" note listing exactly what it
    recorded. Trust that note, not your own reading of his message.
+
+## Step 3B: REVIEW_REQUIRED and PROHIBITED client texts
+
+- **PROHIBITED** (e.g. Washington without consent; on the National DNC Registry with a
+  personal line and no relationship): tell him why, and don't redraft to get round it.
+  Only corrected facts (e.g. written consent obtained) can change it.
+- **REVIEW_REQUIRED:** list exactly what's missing. Usually it's one of:
+  - a DNC scrub
+  - Texas registration
+  - an unverified state
+  - the carrier confirmation
+
+  Fill the facts if he can supply them. Otherwise run `$SMS legal-review <BATCH>`, which
+  writes a memo for counsel (no phone numbers), and give it to him.
+- **Clearances** are recorded **only from his own typed line**, starting at the beginning
+  of a line, with evidence (min 10 characters) and an optional end date:
+  - `clearance tx302-registered: <certificate no./date> [until YYYY-MM-DD]`
+  - `clearance tx302-customer-exemption: <since when Westmont has traded under this name>`
+  - `clearance carrier-cold-b2b: <Ringover written confirmation ref>`
+  - `clearance state-OH: <counsel name/memo/date>`
+  - `clearance msg-B1012A-03: <counsel ref>`. This covers one exact message version, and
+    only REVIEW, never PROHIBITED.
+  - `revoke clearance <key>`
+
+  Never suggest wording that implies he has evidence he hasn't mentioned. Never type or
+  simulate these yourself. `$SMS clearances` lists them.
 
 ## Step 4: send (only APPROVED messages)
 
@@ -140,7 +187,10 @@ Never call the guard script, sqlite3, or the ledger file directly (the hook bloc
 - overwrite `Messages!A2` downward with `messages` (snapshot, our own sheet; clear leftover
   rows if fewer)
 - append `new_events` to `Events!A1` (append-only audit trail), then `$SMS sync-mark <max_event_id>`
-- overwrite `OptOuts!A2` downward with `optouts`.
+- overwrite `OptOuts!A2` downward with `optouts`, and `Clearances!A2` downward with `clearances`
+  (Messages now has 26 columns, A:Z; the last is `compliance_json`).
+- Restore (step 0) also reads `Clearances!A1:F` into `"clearances"`. Global clearances come
+  back marked "restored" and are listed on every review table. Per-message ones don't.
 
 ## Replies, follow-ups, opt-outs
 
@@ -157,7 +207,8 @@ Never call the guard script, sqlite3, or the ledger file directly (the hook bloc
 
 - Send without his typed approval code + the Ringover prompt; schedule texts; use alphanumeric
   senders or another user's line.
-- Text opted-out, cold, or consent-unknown recipients.
+- Text opted-out or consent-unknown recipients, or any client text that isn't PERMITTED/EXEMPT.
+- Treat REVIEW_REQUIRED as "probably fine". It means blocked until the gap is closed.
 - Create or edit HubSpot contacts; put candidates in HubSpot.
 - Edit `.claude/settings.json` hooks/permissions, the guard, or the ledger to get a message out.
 - Change Ringover/HubSpot account settings; enable WhatsApp, calling campaigns or webhooks.

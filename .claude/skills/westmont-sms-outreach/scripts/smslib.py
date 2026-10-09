@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import compliance as C
+
 # --------------------------------------------------------------------------
 # Configuration (change only by committing a code change)
 # --------------------------------------------------------------------------
@@ -37,7 +39,7 @@ MAX_SEGMENTS = 3
 AUDIENCES = {"candidate", "client"}
 PURPOSES = {
     "candidate": {"opportunity", "follow_up", "reply", "availability_check"},
-    "client": {"follow_up", "reply", "existing_conversation", "prospecting"},
+    "client": {"prospecting", "follow_up", "reply", "existing_conversation", "client_service"},
 }
 CONSENT = {
     # basis -> allowed?  (shown to Mustapha in every review table)
@@ -49,14 +51,10 @@ CONSENT = {
         "sourced": True,              # found via data tool; first text must identify + STOP
         "unknown": False,
     },
-    "client": {
-        "existing_client": True,
-        "prior_conversation": True,   # real prior call/email/text on record
-        "requested_contact": True,    # they asked to be contacted / gave mobile
-        "written_consent": True,
-        "cold": False,                # cold promotional texting is blocked
-        "unknown": False,
-    },
+    # Client texts are judged by the legal rules engine (compliance.py), not by a
+    # fixed allow-list: every relationship type, including "none" (cold), can be
+    # drafted; the engine decides PERMITTED / EXEMPT / REVIEW_REQUIRED / PROHIBITED.
+    "client": {k: True for k in C.RELATIONSHIPS},
 }
 
 # Statuses
@@ -114,7 +112,10 @@ CREATE TABLE IF NOT EXISTS messages (
   approved_hash TEXT, approved_at TEXT, approval_expires TEXT,
   attempts INTEGER DEFAULT 0, submitted_at TEXT,
   ringover_message_id TEXT, ringover_conversation_id TEXT, result_detail TEXT,
-  hubspot_note_id TEXT, created_at TEXT, updated_at TEXT);
+  hubspot_note_id TEXT, created_at TEXT, updated_at TEXT, compliance_json TEXT);
+CREATE TABLE IF NOT EXISTS clearances (
+  key TEXT PRIMARY KEY, evidence TEXT, granted_at TEXT, expires_at TEXT,
+  revoked_at TEXT, bound_hash TEXT, source TEXT);
 CREATE TABLE IF NOT EXISTS presentations (
   code TEXT PRIMARY KEY, batch_id TEXT, created_at TEXT, expires_at TEXT,
   active INTEGER, items TEXT);
@@ -136,6 +137,9 @@ def connect(path=None):
     conn = sqlite3.connect(str(path), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(messages)")}
+    if "compliance_json" not in cols:   # ledgers created before the legal rules engine
+        conn.execute("ALTER TABLE messages ADD COLUMN compliance_json TEXT")
     return conn
 
 
@@ -182,7 +186,7 @@ def update_msg(conn, msg_id, **fields):
 TOLL_FREE = {"800", "833", "844", "855", "866", "877", "888"}
 
 _TZ_CODES = {
-    "America/New_York": """201 202 203 207 212 215 216 220 223 227 234 239 240 248 252 260 267 272
+    "America/New_York": """201 202 203 207 212 215 216 220 223 227 229 231 234 239 240 248 252 260 267 269 272
         276 283 301 302 304 305 313 315 317 321 324 326 329 330 332 336 339 347 351 352 363 380 386
         401 404 407 410 412 413 419 423 434 436 440 443 445 463 470 472 475 478 484 502 508 513 516
         517 518 540 551 561 567 570 571 582 585 586 603 606 607 609 610 614 616 617 624 631 640 645
@@ -209,7 +213,7 @@ _TZ_CODES = {
 _SPLIT = {
     "850": ["America/Chicago", "America/New_York"], "448": ["America/Chicago", "America/New_York"],
     "812": ["America/New_York", "America/Chicago"], "930": ["America/New_York", "America/Chicago"],
-    "219": ["America/Chicago"],
+    "219": ["America/Chicago"], "574": ["America/New_York", "America/Chicago"],
     "270": ["America/Chicago", "America/New_York"], "364": ["America/Chicago", "America/New_York"],
     "906": ["America/New_York", "America/Chicago"],
     "931": ["America/Chicago", "America/New_York"],
@@ -313,12 +317,26 @@ def segment_info(text):
             "limit": 70, "unicode_chars": bad}
 
 
-def content_hash(msg_id, version, phone, content):
-    return hashlib.sha256(f"{msg_id}\n{version}\n{phone}\n{content}".encode()).hexdigest()
+def content_hash(msg_id, version, phone, content, compliance_json=""):
+    # The legal facts are part of what is approved: changing them voids approval.
+    return hashlib.sha256(f"{msg_id}\n{version}\n{phone}\n{content}\n{compliance_json or ''}"
+                          .encode()).hexdigest()
 
 
 def msg_hash(m):
-    return content_hash(m["msg_id"], m["version"], m["phone"], m["content"])
+    return content_hash(m["msg_id"], m["version"], m["phone"], m["content"], m["compliance_json"])
+
+
+def solicitation_id_problems(content):
+    """FCC 64.1200(d)(4): a telemarketing message must identify the individual and
+    the business. Required on every client solicitation, plus an opt-out line."""
+    low = content.lower()
+    probs = []
+    if "mustapha" not in low or "westmont" not in low:
+        probs.append("client solicitation must name Mustapha and Westmont in every text")
+    if "stop" not in low:
+        probs.append("client solicitation must include an opt-out line (e.g. 'Reply STOP to opt out')")
+    return probs
 
 
 def first_contact_problems(content):
@@ -416,10 +434,16 @@ def evaluate_send(conn, tool_input, now=None, simulate=False):
         if pc["identical_already_sent"]:
             reasons.append("Ringover already shows this exact text sent to this number")
 
-    allowed_consent = CONSENT.get(m["audience"], {})
-    if not allowed_consent.get(m["consent_basis"]):
-        reasons.append(f"consent basis '{m['consent_basis']}' does not allow texting this"
-                       f" {m['audience']}")
+    legal = C.assess(conn, m, now, msg_hash(m))
+    if legal["status"] not in C.SENDABLE:
+        reasons.append(f"legal check {legal['status']}: " + "; ".join(legal["reasons"]))
+    if m["audience"] == "candidate" and not CONSENT["candidate"].get(m["consent_basis"]):
+        reasons.append(f"consent basis '{m['consent_basis']}' does not allow texting this candidate")
+    is_solicitation = m["audience"] == "client" and m["purpose"] not in ("client_service", "reply")
+    if is_solicitation:
+        reasons.extend(solicitation_id_problems(content))
+    has_ebr = any("established business relationship" in e or "written permission" in e
+                  for e in legal["exemptions"])
 
     w = window_check(to, m["tz_override"], now)
     if w:
@@ -437,6 +461,13 @@ def evaluate_send(conn, tool_input, now=None, simulate=False):
                            f" {MIN_GAP_HOURS_SAME_NUMBER}h ({o['msg_id']})")
         if o["status"] in (SUBMITTING, UNCERTAIN):
             reasons.append(f"an earlier text to this number has an unresolved status ({o['msg_id']})")
+
+    if is_solicitation and not has_ebr:
+        recent = [o for o in others if o["audience"] == "client" and
+                  (parse_iso(o["submitted_at"]) or now) > now - timedelta(days=30)]
+        if len(recent) >= C.COLD_MAX_PER_30_DAYS:
+            reasons.append(f"Westmont policy: max {C.COLD_MAX_PER_30_DAYS} texts in 30 days to a contact"
+                           " with no business relationship")
 
     prior_out = bool(others) or bool(pc and pc["last_outbound_at"])
     if not prior_out:
