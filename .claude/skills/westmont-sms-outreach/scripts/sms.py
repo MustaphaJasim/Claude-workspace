@@ -94,6 +94,7 @@ def cmd_restore(conn, a):
         for k in FIELDS:
             if r.get(k) in ("", "None"):
                 r[k] = None
+        r["phone"] = L.normalize_phone(r.get("phone"))[0] or r.get("phone")  # Sheets may drop the "+"
         existing = L.get_msg(conn, r["msg_id"])
         if existing and existing["status"] in L.SENT_LIKE | {L.RINGOVER_FAILED} and \
                 r["status"] not in L.SENT_LIKE | {L.RINGOVER_FAILED}:
@@ -111,7 +112,7 @@ def cmd_restore(conn, a):
         r = row if isinstance(row, dict) else dict(zip(["phone", "source", "added_at"], row))
         if r.get("phone") and r["phone"] != "phone":
             conn.execute("INSERT OR IGNORE INTO optouts(phone, source, added_at) VALUES(?,?,?)",
-                         (r["phone"], r.get("source"), r.get("added_at")))
+                         (L.normalize_phone(r["phone"])[0] or str(r["phone"]), r.get("source"), r.get("added_at")))
     L.set_meta(conn, "ledger_ready", "yes")
     L.set_meta(conn, "ready_at", L.iso(L.utcnow()))
     L.set_meta(conn, "ready_via", f"restore:{Path(a.file).name}")

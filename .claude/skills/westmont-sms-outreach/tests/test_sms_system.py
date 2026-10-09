@@ -339,12 +339,17 @@ class TestDuplicatesAndOutcomes(Base):
         c = self.conn()
         L.update_msg(c, f"{bid}-02", status="SUBMITTED", submitted_at=L.iso(L.utcnow()))
         export = json.loads(self.cli("sync-export"))
+        # Google Sheets turns "+12145550102" into 12145550102; restore must undo that
+        ph = export["messages_header"].index("phone")
+        export["messages"] = [[(str(v).lstrip("+") if i == ph else ("" if v is None else str(v)))
+                               for i, v in enumerate(r)] for r in export["messages"]]
         f = os.path.join(self.tmp.name, "restore.json")
         Path(f).write_text(json.dumps({"messages": export["messages"], "optouts": export["optouts"]}))
         os.remove(self.db)
         self.cli("restore", f)
         self.assertEqual(self.status(f"{bid}-01"), "DRAFT")
         self.assertEqual(self.status(f"{bid}-02"), "SUBMITTED")
+        self.assertEqual(L.get_msg(self.conn(), f"{bid}-02")["phone"], "+12145550102")
 
     def test_unready_ledger_blocks_everything(self):
         os.remove(self.db)
