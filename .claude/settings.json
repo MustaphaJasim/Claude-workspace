@@ -21,6 +21,59 @@
       "mcp__TheirStack__cancel_billing_invoice",
       "mcp__TheirStack__cancel_subscription",
       "mcp__TheirStack__add_member_to_team"
+    ],
+    "ask": [
+      "mcp__ringover__sms_send",
+      "mcp__ringover__sms_opt_out_add"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/skills/westmont-sms-outreach/scripts/sms_guard.py\" prompt",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__ringover__sms_send|mcp__ringover__sms_opt_out_remove|Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/skills/westmont-sms-outreach/scripts/sms_guard.py\" pre",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__ringover__sms_send",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/skills/westmont-sms-outreach/scripts/sms_guard.py\" post",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "mcp__ringover__sms_send",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/skills/westmont-sms-outreach/scripts/sms_guard.py\" fail",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }
